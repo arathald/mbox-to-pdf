@@ -617,26 +617,47 @@ This ensures:
 
 ### Test Fixtures
 
-#### `sample_data/simple.mbox`
-- 2 plain-text emails (no attachments)
-- Dates spanning Jan 4-5, 2008
-- Purpose: Basic parsing, grouping, HTML rendering tests
+Test fixtures are located in `sample_data/` directory and referenced via pytest fixtures in test code.
 
-#### `sample_data/complex.mbox` (NEW)
-- Multi-part emails with various attachment types
-- HTML emails with inline images
-- Mixed encodings and charsets
-- Malformed headers and edge cases
-- Contains:
-  - Email with `.txt` attachment (plain text file)
-  - Email with `.csv` attachment (spreadsheet data)
-  - Email with `.xlsx` attachment (Excel workbook)
-  - Email with `.docx` attachment (Word document)
-  - Email with `.pdf` attachment (PDF document)
-  - Email with image attachments (`.png`, `.jpg`)
-  - Email with `.html` attachment (standalone HTML)
-  - Email with `multipart/mixed` and `multipart/related` structures
-  - Email with inline base64-encoded content
+#### `sample_data/simple.mbox`
+- **Location**: `sample_data/simple.mbox`
+- **Fixture reference**: `simple_fixture` (pytest fixture)
+- **Content**: 2 plain-text emails (no attachments)
+- **Dates**: Jan 4-5, 2008
+- **Purpose**: Basic parsing, grouping, HTML rendering tests
+- **Use cases**: 
+  - `test_parse_simple_email(simple_fixture)`
+  - `test_parse_multiple_emails(simple_fixture)`
+  - `test_plain_text_email_to_html(simple_fixture)`
+
+#### `sample_data/complex.mbox`
+- **Location**: `sample_data/complex.mbox`
+- **Fixture reference**: `complex_fixture` (pytest fixture)
+- **Content**: 9 emails with various attachment types, encodings, and structures
+- **Dates**: Jan 10-18, 2008
+- **Purpose**: Comprehensive testing of parsing, attachment handling, rendering, error handling
+
+**Emails in complex.mbox** (9 total):
+1. **Text attachment** - `notes.txt` (project task list)
+2. **CSV attachment** - `sales_q1.csv` (quarterly data, 3 months × 3 regions)
+3. **Inline images** - Multipart/related with embedded PNG (base64)
+4. **Mixed attachments** - `README.txt`, `data.csv`, `logo.png` (three files)
+5. **Non-UTF8 encoding** - ISO-8859-1 charset with special characters (é, ñ, ü, ö)
+6. **HTML attachment** - `report.html` (standalone HTML with table)
+7. **Excel attachment** - `budget_2008.xlsx` (real XLSX workbook with formatted data)
+8. **Word attachment** - `project_proposal.docx` (real DOCX with headings, lists, tables)
+9. **PDF attachment** - `financial_report_q1.pdf` (real PDF document)
+
+**Supported attachment types tested**:
+- ✅ Text files (`.txt`)
+- ✅ Spreadsheet data (`.csv`)
+- ✅ Images (`.png` inline and as attachment)
+- ✅ Spreadsheets (`.xlsx` with multiple sheets)
+- ✅ Documents (`.docx` with formatting)
+- ✅ HTML (`.html` standalone)
+- ✅ PDF (`.pdf` - reference handling)
+- ✅ Multipart structures (`multipart/mixed`, `multipart/related`)
+- ✅ Character encoding variations (UTF-8, ISO-8859-1)
 
 ### Unit Tests (`tests/test_mbox_converter.py`)
 
@@ -751,21 +772,59 @@ def test_large_mbox_performance(complex_fixture):
 ### Fixtures
 
 #### Pytest Fixtures
+
+These fixtures are defined in `tests/conftest.py` and used throughout test suite:
+
 ```python
+from pathlib import Path
+import pytest
+
 @pytest.fixture
-def simple_fixture(tmp_path):
-    """Path to sample_data/simple.mbox for basic tests."""
+def simple_fixture():
+    """
+    Path to sample_data/simple.mbox for basic parsing tests.
+    
+    Location: mbox-to-pdf/sample_data/simple.mbox
+    Contains: 2 plain text emails (Jan 4-5, 2008)
+    """
     return Path(__file__).parent.parent / "sample_data" / "simple.mbox"
 
 @pytest.fixture
-def complex_fixture(tmp_path):
-    """Path to sample_data/complex.mbox for comprehensive tests."""
+def complex_fixture():
+    """
+    Path to sample_data/complex.mbox for comprehensive tests.
+    
+    Location: mbox-to-pdf/sample_data/complex.mbox
+    Contains: 9 emails with 8 attachment types (Jan 10-18, 2008)
+             - Text, CSV, XLSX, DOCX, PDF, HTML, PNG, mixed
+    """
     return Path(__file__).parent.parent / "sample_data" / "complex.mbox"
 
 @pytest.fixture
 def temp_output_dir(tmp_path):
-    """Temporary directory for PDF output."""
-    return tmp_path / "output"
+    """Temporary directory for PDF output during tests."""
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    return output_dir
+```
+
+**Usage Examples**:
+```python
+def test_parse_simple_email(simple_fixture):
+    """Use simple_fixture to test basic email parsing."""
+    mbox = mailbox.mbox(str(simple_fixture))
+    emails = list(mbox)
+    assert len(emails) == 2
+
+def test_xlsx_attachment_rendering(complex_fixture, temp_output_dir):
+    """Use complex_fixture + temp_output_dir for integration test."""
+    converter = MboxConverter()
+    result = converter.convert_mbox_files(
+        [str(complex_fixture)],
+        str(temp_output_dir)
+    )
+    assert result.success
+    assert result.pdfs_created >= 1
 ```
 
 ### Manual Testing
