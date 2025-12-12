@@ -456,6 +456,151 @@ except Exception as e:
 </div>
 ```
 
+### Attachment Error Dialog (User-Facing)
+
+When an attachment cannot be processed, the application displays a **user-friendly warning dialog** to inform the user.
+
+**Dialog Specification**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ ⚠️  Attachment Processing Error                          │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ Could not process attachment in email                  │
+│                                                         │
+│ EMAIL DETAILS:                                          │
+│   Subject: {email_subject}                              │
+│   Date:    {email_date}                                 │
+│   From:    {from_address}                               │
+│                                                         │
+│ ATTACHMENT:                                             │
+│   Filename: {filename_with_extension}                   │
+│   Type:     {mime_type}                                 │
+│   Size:     {file_size}                                 │
+│                                                         │
+│ REASON:                                                 │
+│   {error_message}                                       │
+│                                                         │
+│ ACTION:                                                 │
+│   The attachment will be included as a reference note  │
+│   in the PDF. The conversion will continue.             │
+│                                                         │
+│                                    [ OK ]              │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Error Messages (User-Friendly)**:
+- **File appears to be corrupted**: "The file could not be read. It may be corrupted or incomplete."
+- **File type not supported**: "This file type is not supported for rendering. (e.g., .exe, .zip)"
+- **File is too large**: "The file exceeds the maximum size limit (100MB). Will be included as reference."
+- **Cannot decode file**: "The file encoding could not be determined. Will be included as reference."
+- **Missing required library**: "A required library for processing this file type is not installed."
+- **Unsupported format variant**: "This variant of the file format is not supported. (e.g., password-protected Excel)"
+
+**Implementation Details**:
+- Dialog appears during conversion (Step 5)
+- Non-blocking: User can click OK and conversion continues
+- Does NOT include technical exception messages (user-friendly only)
+- Full technical error logged to conversion logs for support/debugging
+- Attachment still included in PDF as reference note (not skipped)
+- Multiple attachment errors show one dialog per error (or batch summary option)
+
+**Types of Attachments Requiring Error Dialogs**:
+1. **Text files**: Encoding errors, binary file instead of text
+2. **Images**: Corrupt image headers, unsupported formats (HEIF, WebP if not handled)
+3. **Spreadsheets**: Password-protected, unsupported Excel versions, corrupted cells
+4. **Documents**: Password-protected DOCX, corrupted structures
+5. **PDF**: Encrypted PDFs, corrupted headers
+6. **HTML**: Malformed HTML, circular references, excessively nested
+7. **CSV**: Encoding issues, delimiter detection failed, huge line lengths
+
+### File Type Coverage & Testing Requirements
+
+The application MUST reliably handle the following attachment types. Each type has specific quality expectations:
+
+#### 1. Text Files (`.txt`)
+- **Must work**: Plain ASCII, UTF-8, common encodings (Latin-1, UTF-16)
+- **Testing**: Simple task lists, code snippets, logs, notes
+- **Complex.mbox**: `notes.txt` (project task list)
+- **Error handling**: Graceful fallback if encoding unknown
+- **Rendering**: Preserve line breaks, monospace font in PDF
+
+#### 2. Spreadsheet Data (`.csv`)
+- **Must work**: Standard comma/tab/semicolon delimiters, quoted fields, escape sequences
+- **Testing**: Sales data, financial records, inventory lists
+- **Complex.mbox**: `sales_q1.csv` (3-month data, 3 regions)
+- **Error handling**: Automatic delimiter detection, graceful degradation
+- **Rendering**: HTML table with proper column alignment
+
+#### 3. Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`)
+- **Must work**: Common formats, various dimensions, EXIF data
+- **Testing**: Screenshots, photos, diagrams, logos, both inline and attached
+- **Complex.mbox**: `logo.png` (3 total: inline + 2 attachments)
+- **Error handling**: Corrupt header detection, unsupported variants
+- **Rendering**: Base64 embedding, proper scaling, alt text with filename
+
+#### 4. Spreadsheets (`.xlsx`)
+- **Must work**: Modern Excel files, multiple sheets, basic formatting, formulas
+- **Testing**: Budgets, financial reports, project schedules, sales data
+- **Complex.mbox**: `budget_2008.xlsx` (real Excel, 1 sheet, numeric data, bold headers)
+- **Quality requirements**:
+  - Extract all sheets
+  - Evaluate formulas to values (not formula strings)
+  - Preserve bold/italic formatting
+  - Preserve merged cells
+  - Handle numeric formatting (currency, percentages)
+- **Error handling**: Password-protected files, unsupported versions, corrupted sheets
+- **Rendering**: Separate table per sheet, sheet name as header
+
+#### 5. Documents (`.docx`)
+- **Must work**: Modern Word documents, common formatting, tables, lists, images
+- **Testing**: Proposals, reports, memos, structured documents
+- **Complex.mbox**: `project_proposal.docx` (real DOCX, headings, lists, table)
+- **Quality requirements**:
+  - Extract all text preserving paragraph breaks
+  - Preserve heading hierarchy (H1, H2, H3, etc.)
+  - Preserve text styling (bold, italic, underline)
+  - Preserve lists (bullets, numbered)
+  - Handle tables (extract as formatted text or simple table)
+- **Error handling**: Password-protected files, corrupted structures, unknown styles
+- **Rendering**: Semantic HTML with proper heading tags
+
+#### 6. HTML Files (`.html`, `.htm`)
+- **Must work**: Valid HTML, CSS styling, embedded content
+- **Testing**: Web pages, reports, documentation
+- **Complex.mbox**: `report.html` (real HTML with table and styling)
+- **Quality requirements**:
+  - Preserve semantic structure (headings, paragraphs, lists)
+  - Preserve safe styling (colors, fonts, sizing)
+  - Handle embedded images (data URIs)
+  - Sanitize unsafe content (scripts, forms)
+- **Error handling**: Malformed HTML, circular includes, excessively nested
+- **Rendering**: Direct HTML → PDF, styled appropriately
+
+#### 7. PDF Files (`.pdf`)
+- **Must work**: Standard PDFs, encrypted PDFs (warning), large PDFs
+- **Testing**: Reports, certificates, archives, reference documents
+- **Complex.mbox**: `financial_report_q1.pdf` (real PDF, formatted)
+- **Quality requirements**:
+  - Cannot embed PDF in PDF (technical limitation)
+  - Must create reference note with filename, size, page count
+  - Must warn if encrypted/password-protected
+- **Error handling**: Encrypted PDFs (warn user), corrupted headers (reference only)
+- **Rendering**: Reference block with metadata, note about availability separately
+
+#### Coverage Matrix
+
+| File Type | Complex.mbox | Tests | Error Dialog | Quality Level |
+|-----------|------|-------|-------|---------------|
+| .txt      | ✅ (notes.txt) | ✓ | ✓ | Must work perfectly |
+| .csv      | ✅ (sales_q1.csv) | ✓ | ✓ | Must work perfectly |
+| .png      | ✅ (logo.png ×3) | ✓ | ✓ | Must work perfectly |
+| .jpg      | (future) | ✓ | ✓ | Should work |
+| .xlsx     | ✅ (budget_2008.xlsx) | ✓ | ✓ | Must work perfectly |
+| .docx     | ✅ (project_proposal.docx) | ✓ | ✓ | Must work perfectly |
+| .html     | ✅ (report.html) | ✓ | ✓ | Must work perfectly |
+| .pdf      | ✅ (financial_report_q1.pdf) | ✓ | ✓ | Reference only (OK) |
+
 ### Dependencies for Attachment Handling
 
 Add to `requirements.txt`:
@@ -648,6 +793,34 @@ Test fixtures are located in `sample_data/` directory and referenced via pytest 
 8. **Word attachment** - `project_proposal.docx` (real DOCX with headings, lists, tables)
 9. **PDF attachment** - `financial_report_q1.pdf` (real PDF document)
 
+#### `sample_data/takeout_fixture/`
+- **Location**: `sample_data/takeout_fixture/` (directory structure)
+- **Fixture reference**: `takeout_fixture` (pytest fixture)
+- **Purpose**: Realistic Gmail Takeout export structure for testing folder selection and multi-file conversion
+- **Structure**: Mirrors actual Gmail Takeout directory layout
+
+**Directory Structure**:
+```
+takeout_fixture/
+├── Mail/
+│   ├── All Mail.mbox         (9 emails - all messages)
+│   ├── Drafts.mbox           (3 emails - user drafts)
+│   ├── Sent Mail.mbox        (3 emails - sent messages)
+│   └── Project Notes.mbox    (3 emails - custom label)
+└── [Gmail]/
+    ├── Important.mbox        (3 emails - Gmail system label)
+    └── Spam.mbox             (0 emails - empty folder test)
+```
+
+**Testing Coverage**:
+- User selects `takeout_fixture` folder (Step 1)
+- Application discovers 6 .mbox files (Step 2 shows all)
+- User can select/deselect any files (partial conversion test)
+- Tests multi-file handling with same emails grouped differently
+- Tests both custom labels (`Project Notes`) and system labels (`[Gmail]/Important`)
+- Tests empty mbox files (`Spam.mbox`)
+- Tests directory traversal and recursive file discovery
+
 **Supported attachment types tested**:
 - ✅ Text files (`.txt`)
 - ✅ Spreadsheet data (`.csv`)
@@ -760,10 +933,13 @@ def test_empty_mbox_file(complex_fixture):
     """Handle empty mbox without crashing."""
     
 def test_corrupted_attachment_skipped(complex_fixture):
-    """Corrupted attachment skipped with warning in logs."""
+    """Corrupted attachment triggers user warning dialog with details."""
     
 def test_unrecognized_attachment_type_handled(complex_fixture):
-    """Unknown MIME types handled gracefully."""
+    """Unknown MIME types trigger warning, fallback reference rendered."""
+    
+def test_attachment_error_dialog_displays_email_info(complex_fixture):
+    """Error dialog shows: email subject, date, filename, extension, error message."""
     
 def test_large_mbox_performance(complex_fixture):
     """1000+ emails convert in < 30 seconds."""
@@ -801,6 +977,29 @@ def complex_fixture():
     return Path(__file__).parent.parent / "sample_data" / "complex.mbox"
 
 @pytest.fixture
+def takeout_fixture():
+    """
+    Path to sample_data/takeout_fixture/ directory for multi-file tests.
+    
+    Location: mbox-to-pdf/sample_data/takeout_fixture/
+    Structure: Realistic Gmail Takeout export layout
+    Contains:
+      - Mail/All Mail.mbox (9 emails)
+      - Mail/Drafts.mbox (3 emails)
+      - Mail/Sent Mail.mbox (3 emails)
+      - Mail/Project Notes.mbox (3 emails - custom label)
+      - [Gmail]/Important.mbox (3 emails - system label)
+      - [Gmail]/Spam.mbox (empty)
+    
+    Emulates real Gmail Takeout folder structure for testing:
+    - Folder selection (Step 1)
+    - Multiple .mbox file discovery (Step 2)
+    - Partial selection of files
+    - Multi-file conversion
+    """
+    return Path(__file__).parent.parent / "sample_data" / "takeout_fixture"
+
+@pytest.fixture
 def temp_output_dir(tmp_path):
     """Temporary directory for PDF output during tests."""
     output_dir = tmp_path / "output"
@@ -825,6 +1024,27 @@ def test_xlsx_attachment_rendering(complex_fixture, temp_output_dir):
     )
     assert result.success
     assert result.pdfs_created >= 1
+
+def test_discover_mbox_files_in_takeout(takeout_fixture):
+    """Test file discovery in realistic Takeout structure."""
+    # Simulate Step 1: folder selection
+    discovered = discover_mbox_files(str(takeout_fixture))
+    assert len(discovered) == 6
+    assert any("All Mail" in f for f in discovered)
+    assert any("[Gmail]" in f for f in discovered)
+
+def test_multi_file_conversion(takeout_fixture, temp_output_dir):
+    """Test conversion of multiple files from Takeout structure."""
+    converter = MboxConverter()
+    mbox_files = discover_mbox_files(str(takeout_fixture))
+    
+    # Simulate Step 2: user selects subset of files
+    selected_files = [f for f in mbox_files if "All Mail" in f or "Drafts" in f]
+    
+    result = converter.convert_mbox_files(selected_files, str(temp_output_dir))
+    assert result.success
+    # Should create multiple PDFs (one per month or user selection)
+    assert result.pdfs_created >= 2
 ```
 
 ### Manual Testing
