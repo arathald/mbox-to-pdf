@@ -168,7 +168,448 @@ Step 5: Convert & Progress
 END
 ```
 
+---
+
+## Email Document Specification
+
+**Purpose**: Emails are rendered as formal documents suitable for legal, financial, and forensic use. All relevant information is preserved and clearly presented. Threads are properly attributed. Pages are clearly labeled.
+
+### Email Header Rendering
+
+Every email includes a **professional header section** with all relevant metadata:
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         EMAIL DOCUMENT HEADER                              │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│ Date: Monday, January 13, 2008 at 2:30 PM                                 │
+│ From: alice@example.com                                                    │
+│ To: bob@example.com                                                        │
+│ Cc: charlie@example.com, diana@example.com                                 │
+│ Subject: Q1 Budget Review Meeting                                          │
+│ Message-ID: <budget-review-20080113@example.com>                           │
+│ In-Reply-To: <previous-message-id@example.com> [if applicable]             │
+│ References: [all related message IDs in thread]                            │
+│                                                                            │
+├────────────────────────────────────────────────────────────────────────────┤
+```
+
+**Header Fields** (in order):
+1. **Date**: ISO 8601 format + human-readable (e.g., "Monday, January 13, 2008 at 2:30 PM")
+2. **From**: Full email address (extract name if available, but preserve address)
+3. **To**: All recipients (separated by commas and line breaks for readability)
+4. **Cc**: Carbon copy recipients (if present)
+5. **Bcc**: Blind copy recipients (if present and accessible)
+6. **Subject**: Full subject line (preserve exactly as sent)
+7. **Message-ID**: Unique identifier (for forensic/legal reference)
+8. **In-Reply-To**: Reference to parent message (if this is a reply)
+9. **References**: All message IDs in the conversation thread (comma-separated)
+10. **X-Mailer**: Original email client (if present, for authenticity)
+
+**HTML/CSS**:
+```html
+<div class="email-header">
+  <div class="header-field">
+    <span class="header-label">Date:</span>
+    <span class="header-value">Monday, January 13, 2008 at 2:30 PM</span>
+  </div>
+  <div class="header-field">
+    <span class="header-label">From:</span>
+    <span class="header-value">alice@example.com</span>
+  </div>
+  <!-- ... more fields ... -->
+</div>
+
+<style>
+.email-header {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 12px 15px;
+  margin-bottom: 20px;
+  font-family: monospace;
+  font-size: 10pt;
+  color: #333;
+}
+
+.header-field {
+  display: flex;
+  margin-bottom: 6px;
+}
+
+.header-label {
+  font-weight: bold;
+  min-width: 100px;
+  color: #555;
+}
+
+.header-value {
+  flex: 1;
+  color: #222;
+  word-break: break-word;
+}
+</style>
+```
+
+### Email Body Rendering
+
+**Plain Text Emails**:
+- Preserve line breaks exactly
+- Preserve quoted text (lines starting with `>`)
+- Use monospace font for legibility
+- Wrap long lines gracefully
+
+```html
+<div class="email-body">
+  <pre class="plaintext-body">Meeting is confirmed for Tuesday at 2pm.
+
+Can you send the budget spreadsheet by Monday EOD?
+
+Thanks,
+Alice</pre>
+</div>
+
+<style>
+.plaintext-body {
+  font-family: "Courier New", monospace;
+  font-size: 10pt;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: #333;
+  background-color: #fafafa;
+  border: 1px solid #eee;
+  padding: 12px;
+  margin: 15px 0;
+}
+</style>
+```
+
+**HTML Emails**:
+- Sanitize unsafe content (scripts, forms, links to external resources)
+- Preserve semantic structure (headings, paragraphs, lists, tables)
+- Preserve safe styling (colors, fonts, bold, italic)
+- Preserve embedded images (base64-encoded)
+- Mark external resources as references (don't embed)
+
+```html
+<div class="email-body">
+  <div class="html-body">
+    <!-- Original HTML rendered here (sanitized) -->
+    <h2>Meeting Summary</h2>
+    <p>Attendees:</p>
+    <ul>
+      <li>Alice</li>
+      <li>Bob</li>
+      <li>Charlie</li>
+    </ul>
+  </div>
+</div>
+
+<style>
+.html-body {
+  margin: 15px 0;
+  line-height: 1.5;
+  color: #333;
+}
+</style>
+```
+
+### Attachment Section
+
+**Location**: Immediately after email body, before any forwarded content.
+
+**Format**: Clear, labeled section with one line per attachment.
+
+```html
+<div class="attachments-section">
+  <h3 class="attachments-header">Attachments (3 files)</h3>
+  <ul class="attachments-list">
+    <li class="attachment">
+      <span class="attachment-icon">📎</span>
+      <span class="attachment-name">budget_2008.xlsx</span>
+      <span class="attachment-size">(1.2 MB)</span>
+      <span class="attachment-type">[Embedded as table below]</span>
+    </li>
+    <li class="attachment">
+      <span class="attachment-icon">📎</span>
+      <span class="attachment-name">meeting-notes.docx</span>
+      <span class="attachment-size">(45 KB)</span>
+      <span class="attachment-type">[Embedded as text below]</span>
+    </li>
+    <li class="attachment">
+      <span class="attachment-icon">📎</span>
+      <span class="attachment-name">org-chart.png</span>
+      <span class="attachment-size">(256 KB)</span>
+      <span class="attachment-type">[Embedded as image below]</span>
+    </li>
+  </ul>
+</div>
+```
+
+**CSS**:
+```css
+.attachments-section {
+  background-color: #fff9e6;
+  border-left: 4px solid #ffb84d;
+  padding: 12px 15px;
+  margin: 20px 0;
+  page-break-inside: avoid;
+}
+
+.attachments-header {
+  margin: 0 0 10px 0;
+  font-size: 12pt;
+  color: #333;
+  font-weight: bold;
+}
+
+.attachments-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.attachment {
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 10pt;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.attachment-icon {
+  flex-shrink: 0;
+  color: #666;
+}
+
+.attachment-name {
+  font-family: monospace;
+  color: #222;
+  font-weight: 500;
+}
+
+.attachment-size {
+  color: #888;
+  font-size: 9pt;
+}
+
+.attachment-type {
+  color: #666;
+  font-size: 9pt;
+  font-style: italic;
+}
+```
+
+### Email Threading
+
+**Scenario**: Email with `In-Reply-To` or `References` headers indicates it's part of a thread.
+
+**Rendering**:
+1. **Single email in thread**: Show header with In-Reply-To reference
+2. **All thread emails in same PDF**: Show conversation chronologically
+3. **Thread attribution**: Each message in thread clearly shows sender and date
+
+**Example (Multiple emails in thread)**:
+
+```html
+<!-- Email 1 (oldest) -->
+<div class="email-message">
+  <div class="email-header">
+    Date: January 10, 2008 at 9:00 AM
+    From: alice@example.com
+    To: bob@example.com
+    Subject: Q1 Budget
+  </div>
+  <div class="email-body">
+    We need to finalize the Q1 budget...
+  </div>
+</div>
+
+<div class="thread-separator">
+  ↓ Reply from Bob (January 10, 2008 at 10:30 AM)
+</div>
+
+<!-- Email 2 (reply) -->
+<div class="email-message">
+  <div class="email-header">
+    Date: January 10, 2008 at 10:30 AM
+    From: bob@example.com
+    To: alice@example.com
+    Subject: Re: Q1 Budget
+  </div>
+  <div class="email-body">
+    I've reviewed the numbers. Some questions on Marketing...
+  </div>
+</div>
+
+<div class="thread-separator">
+  ↓ Reply from Alice (January 10, 2008 at 3:00 PM)
+</div>
+
+<!-- Email 3 (counter-reply) -->
+<div class="email-message">
+  ...
+</div>
+```
+
+**CSS for Threading**:
+```css
+.email-message {
+  margin: 0 0 30px 0;
+  page-break-inside: avoid;
+}
+
+.thread-separator {
+  text-align: center;
+  margin: 25px 0;
+  padding: 8px 0;
+  border-top: 1px dashed #ccc;
+  border-bottom: 1px dashed #ccc;
+  font-size: 9pt;
+  color: #999;
+  font-style: italic;
+}
+```
+
+### Page Layout & Breaks
+
+**Page Formatting**:
+- **Top margin**: 1 inch
+- **Bottom margin**: 1 inch
+- **Left margin**: 0.75 inches
+- **Right margin**: 0.75 inches
+- **Font**: 10pt serif (e.g., Times New Roman) for body, monospace for headers/code
+- **Line spacing**: 1.5 (for readability and annotation space)
+
+**Page Breaks**:
+- Each **email** starts on a new page (clear separation for filing)
+- Within long emails, natural breaks occur between email body and attachments
+- Attachments stay with their email (don't orphan attachment from body)
+- Thread continuations stay together if possible (multiple emails per page if they fit)
+
+```html
+<style>
+@page {
+  size: letter;
+  margin: 1in 0.75in;
+}
+
+body {
+  font-family: "Times New Roman", serif;
+  font-size: 10pt;
+  line-height: 1.5;
+  color: #333;
+}
+
+.email-message {
+  page-break-before: always;  /* Each email on new page */
+  page-break-inside: avoid;   /* Don't break email content */
+}
+
+.email-header {
+  page-break-inside: avoid;   /* Header stays with body */
+}
+
+.attachments-section {
+  page-break-inside: avoid;   /* Attachments stay together */
+}
+</style>
+```
+
+### Long Email Handling
+
+**Scenario**: Single email is multiple pages long (e.g., forwarded thread or long body).
+
+**Rendering**:
+- **Page 1**: Email header + start of body
+- **Page 2+**: Continuation of email body
+- **Header on continuation pages**: Repeat email subject at top of each page (optional, for legal documents)
+
+```html
+<!-- Page 1 -->
+<div class="email-message">
+  <div class="email-header">
+    From: alice@example.com
+    Subject: Project Proposal with History
+  </div>
+  <div class="email-body">
+    Here is the full project proposal including all historical emails...
+    [Page 1 content]
+  </div>
+</div>
+
+<!-- Page 2 (automatic page break) -->
+<div class="continuation-header">
+  [Continued: Project Proposal with History - Page 2]
+</div>
+<div class="email-body-continuation">
+  [Page 2 content - body continues]
+</div>
+
+<!-- Page 3 (attachments start) -->
+<div class="continuation-header">
+  [Continued: Project Proposal with History - Attachments]
+</div>
+<div class="attachments-section">
+  <!-- Embedded attachments -->
+</div>
+```
+
+**CSS for Continuation Pages**:
+```css
+.continuation-header {
+  font-size: 9pt;
+  color: #666;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+  font-style: italic;
+  page-break-after: avoid;
+}
+
+@media print {
+  .continuation-header {
+    display: block;  /* Show continuation markers in print */
+  }
+}
+```
+
+### Email as Forensic Document
+
+**Completeness Requirements**:
+- ✅ All headers preserved (Date, From, To, Cc, Bcc, Message-ID, etc.)
+- ✅ Message-ID visible (unique identifier for reference)
+- ✅ References/In-Reply-To visible (shows thread relationships)
+- ✅ All attachments listed (even if not rendered)
+- ✅ Attachment sizes visible (for completeness)
+- ✅ Exact dates/times in standard format (no ambiguity)
+- ✅ Clear threading attribution (who replied when)
+- ✅ Page numbers (for large PDFs)
+- ✅ Export date in footer (when document was created)
+
+**Example PDF Footer** (optional, for large archives):
+```html
+<style>
+@page {
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 9pt;
+    color: #999;
+  }
+  
+  @bottom-left {
+    content: "Generated: " string(export-date);
+    font-size: 8pt;
+    color: #ccc;
+  }
+}
+</style>
+```
+
 ### Core Modules
+
 
 #### `mbox_converter.py`
 
@@ -314,14 +755,82 @@ class AttachmentError(Exception):
 ```python
 @dataclass
 class Email:
-    message_id: str
+    """Email message with complete header information for forensic/legal documentation.
+    
+    All fields are preserved exactly as received (or empty if not present).
+    This ensures the PDF archive is a complete and authentic record.
+    """
+    # Core identifiers
+    message_id: str  # Unique message ID (e.g., '<abc123@example.com>')
     from_addr: str
-    to_addr: str
+    to_addr: str  # Comma-separated list of recipients
+    
+    # Thread information (for proper conversation rendering)
+    cc_addr: Optional[str] = None  # Comma-separated CC recipients
+    bcc_addr: Optional[str] = None  # Comma-separated BCC recipients
+    in_reply_to: Optional[str] = None  # Message-ID of parent message
+    references: Optional[List[str]] = None  # All message-IDs in thread
+    
+    # Content
     date: datetime
     subject: str
     body_text: str
     body_html: Optional[str]
-    headers: Dict[str, str]
+    
+    # Attachments (list of processed attachment objects)
+    attachments: List['Attachment'] = None  # See Attachment dataclass
+    
+    # Complete header dict (for any missing fields)
+    headers: Dict[str, str] = None
+    
+    # Additional forensic metadata
+    x_mailer: Optional[str] = None  # Original email client (for authenticity)
+    
+    def render_header_html(self) -> str:
+        """Render email header as professional HTML (for PDF).
+        
+        Returns formatted header section with all relevant fields.
+        Suitable for legal/financial/forensic documentation.
+        """
+        
+    def render_body_html(self) -> str:
+        """Render email body as HTML (plain text or HTML email).
+        
+        - Plain text emails: wrapped in <pre> with preserved formatting
+        - HTML emails: sanitized and rendered as-is
+        """
+        
+    def format_date_for_display(self) -> str:
+        """Return ISO 8601 + human-readable date (e.g., 'Monday, January 13, 2008 at 2:30 PM')."""
+
+@dataclass
+class Attachment:
+    """Processed email attachment with size and rendering info."""
+    filename: str
+    mime_type: str
+    size_bytes: int
+    rendered_content: Optional[str] = None  # HTML content if successfully rendered
+    content_type: str = None  # 'html', 'text', 'table', 'image', 'reference' (for PDF)
+    error: Optional['AttachmentError'] = None  # If rendering failed
+    
+    def format_size_for_display(self) -> str:
+        """Return human-readable size (e.g., '1.2 MB')."""
+        
+    def render_as_html(self) -> str:
+        """Render attachment in HTML for PDF.
+        
+        Returns appropriate HTML based on type:
+        - text → <pre class="code-block">
+        - csv → <table>
+        - xlsx → <table> (one per sheet)
+        - docx → semantic HTML with headings/lists
+        - html → sanitized <div>
+        - image → <img src="data:...">
+        - pdf → <p class="reference">
+        - unsupported → <p class="attachment-error">
+        """
+```
+```
 ```
 
 #### `error_handling.py`
@@ -1110,6 +1619,47 @@ def test_image_attachment_embedded(complex_fixture):
     
 def test_html_attachment_rendered(complex_fixture):
     """HTML attachment content rendered in PDF."""
+
+#### Email Document Rendering Tests (Forensic/Legal)
+```python
+def test_email_header_rendered_with_all_fields(complex_fixture):
+    """Email header includes: Date, From, To, Cc, Subject, Message-ID."""
+    
+def test_email_header_preserves_exact_addresses(complex_fixture):
+    """Email addresses are exact (not modified or obfuscated)."""
+    
+def test_email_header_uses_readable_date_format(complex_fixture):
+    """Date formatted as 'Monday, January 13, 2008 at 2:30 PM' (human-readable + ISO)."""
+    
+def test_message_id_visible_in_pdf(complex_fixture):
+    """Message-ID field is visible in rendered header (for forensic reference)."""
+    
+def test_attachments_clearly_labeled(complex_fixture):
+    """Attachments section header shows count and lists each file with size."""
+    
+def test_attachment_section_before_body(complex_fixture):
+    """Attachment list appears immediately after header, before body text."""
+    
+def test_unsupported_attachment_listed_with_size(complex_fixture):
+    """Unsupported attachments (MP3) shown in list with size; error dialog triggered separately."""
+    
+def test_email_threading_renders_conversation(complex_fixture):
+    """If In-Reply-To present, shows parent message context."""
+    
+def test_email_thread_shows_attribution(complex_fixture):
+    """Each message in thread shows: [Date] From [address] Subject [subject]."""
+    
+def test_long_email_has_continuation_markers(complex_fixture):
+    """Multi-page emails show '[Continued: Subject - Page N]' on continuation pages."""
+    
+def test_page_breaks_between_emails(complex_fixture):
+    """Each email starts on new page (clear separation for filing/scanning)."""
+    
+def test_email_complete_for_legal_purposes(complex_fixture):
+    """All headers present: Message-ID, In-Reply-To, References, X-Mailer."""
+    
+def test_thread_references_shown(complex_fixture):
+    """References field lists all message-IDs in conversation thread."""
 ```
 
 #### PDF Generation Tests
