@@ -85,30 +85,50 @@
 
 ## Design
 
-### Architecture
+### Architecture: API-First with Thin UI Layer
+
+**Design Principle**: Business logic is testable independent of UI. The GUI is a thin presentation layer that calls the API and displays results.
 
 ```
-┌─────────────────────────────────────────────────┐
-│         GUI Layer (tkinter)                      │
-│  - gui.py: MainWindow, wizard steps              │
-│  - State management between steps                │
-└──────────────────┬──────────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────────┐
-│      Conversion Layer (mbox_converter.py)        │
-│  - MboxConverter class                           │
-│  - Email parsing (stdlib mailbox module)         │
-│  - HTML/PDF rendering (weasyprint)              │
-│  - Grouping logic (month/quarter/year)          │
-└──────────────────┬──────────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────────┐
-│      Utility Layer (utils.py)                    │
-│  - Logging & error capture                       │
-│  - Error modal display                           │
-│  - File system operations                        │
-└──────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  GUI Layer (tkinter) - Thin Presentation Layer         │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ gui.py: MainWindow, wizard steps                 │  │
+│  │ - Display folder/file selection dialogs          │  │
+│  │ - Show progress bar during conversion            │  │
+│  │ - Display error dialogs by calling error handler │  │
+│  │ - NO business logic, NO error handling logic     │  │
+│  └──────────────────────────────────────────────────┘  │
+└────────────────┬─────────────────────────────────────┘
+                 │ Calls API (no UI logic)
+┌────────────────▼─────────────────────────────────────┐
+│  Core API (Fully Testable)                            │
+│                                                       │
+│  mbox_converter.py:                                   │
+│  ├─ MboxConverter class                              │
+│  ├─ convert_mbox_files(paths, output_dir) → Result  │
+│  ├─ discover_mbox_files(folder) → List[str]         │
+│  └─ All parsing, rendering, grouping logic          │
+│                                                       │
+│  error_handling.py:                                   │
+│  ├─ AttachmentError exception (with email context)  │
+│  ├─ format_error_dialog(error) → UserFriendlyInfo   │
+│  └─ All error classification & messages              │
+│                                                       │
+│  utils.py:                                            │
+│  ├─ Logging, file operations, validation             │
+│  └─ No UI-specific code                             │
+│                                                       │
+│  ConversionResult, AttachmentError, etc. (dataclasses)
+└────────────────┬─────────────────────────────────────┘
+                 │
+        ┌────────▼────────┐
+        │ Tests call API  │
+        │ directly (no UI)│
+        └─────────────────┘
 ```
+
+**Functional Equivalence**: The API handles all errors/warnings identically whether called from UI or tests. Error messages, error dialogs, and retry logic are all in the API, not the UI.
 
 ### GUI Flow (5 Steps)
 
@@ -207,9 +227,86 @@ class MboxConverter:
 class ConversionResult:
     success: bool
     pdfs_created: int
-    errors: List[str]
+    errors: List[str]  # Human-readable error summaries for logs
+    attachment_errors: List['AttachmentErrorInfo']  # For error dialogs
     logs: str  # Full log text for display/export
     created_files: List[str]  # Paths to generated PDFs
+```
+
+**Class: `AttachmentErrorInfo`** (for dialog display)
+
+```python
+@dataclass
+class AttachmentErrorInfo:
+    """Structured info for displaying attachment error dialog."""
+    email_subject: str
+    email_date: str  # Formatted date string
+    email_from: str
+    attachment_filename: str  # Including extension
+    mime_type: str
+    file_size: str  # Human-readable (e.g., "256 KB")
+    error_type: str  # "corrupted", "unsupported", "too_large", etc.
+    error_message: str  # User-friendly message (already localized)
+```
+
+**Class: `AttachmentError`** (exception, raised during conversion)
+
+```python
+class AttachmentError(Exception):
+    """Raised when attachment cannot be processed.
+    
+    Carries structured email/attachment context for error dialog display.
+    """
+    def __init__(
+        self,
+        email: Email,
+        attachment_filename: str,
+        mime_type: str,
+        file_size: int,
+        error_type: str,  # "corrupted", "unsupported", "too_large", etc.
+        original_exception: Exception = None
+    ):
+        self.email = email
+        self.attachment_filename = attachment_filename
+        self.mime_type = mime_type
+        self.file_size = file_size
+        self.error_type = error_type
+        self.original_exception = original_exception
+        
+    def to_error_info(self) -> AttachmentErrorInfo:
+        """Convert to displayable error info for dialog."""
+        error_message = self._get_user_friendly_message()
+        return AttachmentErrorInfo(
+            email_subject=self.email.subject,
+            email_date=self.email.date.strftime('%a, %B %d, %Y at %I:%M %p'),
+            email_from=self.email.from_addr,
+            attachment_filename=self.attachment_filename,
+            mime_type=self.mime_type,
+            file_size=self._format_size(self.file_size),
+            error_type=self.error_type,
+            error_message=error_message
+        )
+    
+    def _get_user_friendly_message(self) -> str:
+        """Return user-friendly error message (no technical details)."""
+        messages = {
+            'corrupted': 'The file could not be read. It may be corrupted or incomplete.',
+            'unsupported': 'This file type is not supported for rendering.',
+            'too_large': 'The file exceeds the maximum size limit (100MB).',
+            'encoding_error': 'The file encoding could not be determined.',
+            'missing_library': 'A required library for processing this file type is not installed.',
+            'unsupported_variant': 'This variant of the file format is not supported.',
+            'password_protected': 'This file is password-protected and cannot be opened.',
+        }
+        return messages.get(self.error_type, 'The file could not be processed.')
+    
+    def _format_size(self, size_bytes: int) -> str:
+        """Format byte size as human-readable string."""
+        for unit in ['B', 'KB', 'MB']:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f} GB"
 ```
 
 **Class: `Email`**
@@ -227,9 +324,111 @@ class Email:
     headers: Dict[str, str]
 ```
 
+#### `error_handling.py`
+
+**Purpose**: Centralized error classification and user-friendly message generation. Ensures consistent error handling across API and UI.
+
+**Functions**:
+
+```python
+def classify_attachment_error(
+    original_exception: Exception,
+    attachment_filename: str,
+    mime_type: str
+) -> str:
+    """
+    Classify exception type into user-friendly error category.
+    
+    Args:
+        original_exception: The underlying exception
+        attachment_filename: Name of the file that failed
+        mime_type: MIME type of the attachment
+        
+    Returns:
+        error_type: One of 'corrupted', 'unsupported', 'too_large', 'encoding_error',
+                    'missing_library', 'unsupported_variant', 'password_protected'
+    
+    Examples:
+        - UnicodeDecodeError → 'encoding_error'
+        - ValueError (from openpyxl) → 'corrupted' or 'password_protected'
+        - ImportError (missing library) → 'missing_library'
+        - FileNotFoundError or OSError → 'corrupted'
+        - Unknown MIME type → 'unsupported'
+    """
+
+def is_unsupported_file_type(mime_type: str, filename: str) -> bool:
+    """Check if file type is explicitly unsupported."""
+    unsupported_types = {
+        'audio/*',  # MP3, WAV, etc.
+        'video/*',  # MP4, AVI, etc.
+        'application/x-zip-compressed',  # ZIP files
+        'application/x-executable',  # EXE, DLL
+        'application/octet-stream',  # Generic binary (usually unsupported)
+    }
+    # Check exact match and wildcard patterns
+    ...
+```
+
+**UI Integration**:
+
+```python
+# In gui.py - display error dialog
+from error_handling import AttachmentError, AttachmentErrorInfo
+
+def show_attachment_error_dialog(error_info: AttachmentErrorInfo):
+    """Display user-friendly attachment error dialog (non-blocking)."""
+    dialog = ErrorModal(
+        subject=error_info.email_subject,
+        date=error_info.email_date,
+        from_addr=error_info.email_from,
+        filename=error_info.attachment_filename,
+        mime_type=error_info.mime_type,
+        error_message=error_info.error_message
+    )
+    # Non-blocking - returns immediately
+
+def on_conversion_complete(result: ConversionResult):
+    """Handle conversion completion - show error dialogs for each attachment error."""
+    for error_info in result.attachment_errors:
+        show_attachment_error_dialog(error_info)
+    
+    # Then show final success/failure modal
+    show_conversion_summary(result)
+```
+
 #### `gui.py`
 
-**Class: `MainWindow(tk.Tk)`**
+**Key Principle**: GUI is presentation-only. All business logic is in the API.
+
+```python
+class MainWindow(tk.Tk):
+    def on_convert_clicked(self):
+        """User clicked Convert button on Step 5."""
+        # Call API directly (no conditional logic)
+        result = self.converter.convert_mbox_files(
+            mbox_file_paths=self.selected_files,
+            output_dir=self.output_dir
+        )
+        
+        # API returns structured result with errors
+        # GUI just displays them
+        if result.attachment_errors:
+            for error_info in result.attachment_errors:
+                self.show_attachment_error_dialog(error_info)
+        
+        if result.success:
+            self.show_success_modal(result)
+        else:
+            self.show_error_modal(result)
+```
+
+**What GUI Does NOT Do**:
+- ❌ Catch exceptions (API returns ConversionResult)
+- ❌ Format error messages (API provides user-friendly text)
+- ❌ Determine which attachments to skip (API decides and includes in result)
+- ❌ Classify error types (error_handling.py handles this)
+
+#### `mbox_converter.py`
 
 ```python
 class MainWindow(tk.Tk):
@@ -588,6 +787,14 @@ The application MUST reliably handle the following attachment types. Each type h
 - **Error handling**: Encrypted PDFs (warn user), corrupted headers (reference only)
 - **Rendering**: Reference block with metadata, note about availability separately
 
+#### 8. Audio Files (`.mp3`, `.wav`, `.m4a`, etc.)
+- **Support**: Not supported (explicitly unsupported file type)
+- **Testing**: Meeting recordings, audio notes, podcasts
+- **Complex.mbox**: `meeting-recording.mp3` (10th email)
+- **Quality requirements**: None (intentionally unsupported)
+- **Error handling**: Detect audio MIME types, trigger error dialog
+- **Rendering**: Reference note with filename and size (cannot be embedded in PDF)
+
 #### Coverage Matrix
 
 | File Type | Complex.mbox | Tests | Error Dialog | Quality Level |
@@ -600,6 +807,7 @@ The application MUST reliably handle the following attachment types. Each type h
 | .docx     | ✅ (project_proposal.docx) | ✓ | ✓ | Must work perfectly |
 | .html     | ✅ (report.html) | ✓ | ✓ | Must work perfectly |
 | .pdf      | ✅ (financial_report_q1.pdf) | ✓ | ✓ | Reference only (OK) |
+| .mp3      | ✅ (meeting-recording.mp3) | ✓ | ✓ | Unsupported (intentional) |
 
 ### Dependencies for Attachment Handling
 
@@ -778,11 +986,11 @@ Test fixtures are located in `sample_data/` directory and referenced via pytest 
 #### `sample_data/complex.mbox`
 - **Location**: `sample_data/complex.mbox`
 - **Fixture reference**: `complex_fixture` (pytest fixture)
-- **Content**: 9 emails with various attachment types, encodings, and structures
-- **Dates**: Jan 10-18, 2008
-- **Purpose**: Comprehensive testing of parsing, attachment handling, rendering, error handling
+- **Content**: 10 emails with 8+ attachment types (8 supported, 1 unsupported), encodings, and structures
+- **Dates**: Jan 10-19, 2008
+- **Purpose**: Comprehensive testing of parsing, attachment handling, error dialogs, rendering, and unsupported file detection
 
-**Emails in complex.mbox** (9 total):
+**Emails in complex.mbox** (10 total):
 1. **Text attachment** - `notes.txt` (project task list)
 2. **CSV attachment** - `sales_q1.csv` (quarterly data, 3 months × 3 regions)
 3. **Inline images** - Multipart/related with embedded PNG (base64)
@@ -792,6 +1000,7 @@ Test fixtures are located in `sample_data/` directory and referenced via pytest 
 7. **Excel attachment** - `budget_2008.xlsx` (real XLSX workbook with formatted data)
 8. **Word attachment** - `project_proposal.docx` (real DOCX with headings, lists, tables)
 9. **PDF attachment** - `financial_report_q1.pdf` (real PDF document)
+10. **Unsupported file type** - `meeting-recording.mp3` (audio file for error dialog testing)
 
 #### `sample_data/takeout_fixture/`
 - **Location**: `sample_data/takeout_fixture/` (directory structure)
@@ -803,12 +1012,12 @@ Test fixtures are located in `sample_data/` directory and referenced via pytest 
 ```
 takeout_fixture/
 ├── Mail/
-│   ├── All Mail.mbox         (9 emails - all messages)
-│   ├── Drafts.mbox           (3 emails - user drafts)
-│   ├── Sent Mail.mbox        (3 emails - sent messages)
-│   └── Project Notes.mbox    (3 emails - custom label)
+│   ├── All Mail.mbox         (19 emails - all messages)
+│   ├── Drafts.mbox           (6 emails - user drafts)
+│   ├── Sent Mail.mbox        (6 emails - sent messages)
+│   └── Project Notes.mbox    (6 emails - custom label)
 └── [Gmail]/
-    ├── Important.mbox        (3 emails - Gmail system label)
+    ├── Important.mbox        (4 emails - Gmail system label)
     └── Spam.mbox             (0 emails - empty folder test)
 ```
 

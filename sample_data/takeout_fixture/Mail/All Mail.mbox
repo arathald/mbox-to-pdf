@@ -648,3 +648,29 @@ JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgaHR0cDovL3d3dy5y
 
 --boundary8--
 
+From MAILER-DAEMON Fri Dec 12 22:58:22 2025
+Content-Type: multipart/mixed; boundary="===============5363133788318081347=="
+MIME-Version: 1.0
+From: iris@example.com
+To: greg@example.com
+Subject: Meeting recording - please listen
+Date: Sat, 19 Jan 2008 14:30:00 +0000
+Message-ID: <meeting-recording-20080119@example.com>
+
+--===============5363133788318081347==
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+
+Please find the meeting recording attached.
+--===============5363133788318081347==
+Content-Type: audio/mpeg
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="meeting-recording.mp3"
+
+//uQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+--===============5363133788318081347==--
+
