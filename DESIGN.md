@@ -292,45 +292,301 @@ def validate_output_directory(path: str) -> bool:
 
 ---
 
+## Attachment Handling Specification
+
+### Supported MIME Types
+
+The application MUST handle the following attachment types by rendering them into the PDF output:
+
+1. **Text Files** (`.txt`)
+   - Plain rendering with line breaks preserved
+   - Syntax highlighting optional
+   - Display as pre-formatted code block
+
+2. **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`)
+   - Embed directly in PDF (base64 encoded)
+   - Scale to fit page width (max 95% of page width)
+   - Display filename and dimensions
+   - Support both inline (multipart/related) and attachment
+
+3. **Spreadsheets** (`.csv`, `.xlsx`)
+   - **CSV**: Parse as tabular data, render as HTML table in PDF
+     - Detect delimiter (comma, tab, semicolon)
+     - Preserve cell formatting where possible
+     - Handle quoted fields and escaped characters
+   - **XLSX**: Extract all sheets, render as tables in PDF
+     - Display sheet name as header
+     - Convert cell values (formulas evaluated to their calculated values)
+     - Style headers (bold, background color)
+     - Preserve merged cells by spanning
+     - Ignore VBA macros, pivot tables, charts
+
+4. **Documents** (`.docx`)
+   - Extract all text content preserving paragraphs
+   - Preserve heading styles (H1, H2, etc.)
+   - Preserve bold, italic, underline formatting
+   - Skip complex elements: headers/footers, tables (extract as text), images
+   - Display in readable, flowing format
+
+5. **PDF Files** (`.pdf`)
+   - Cannot embed PDF into PDF directly
+   - Instead: Create reference section with filename, file size, and note "See attached PDF file"
+   - Log warning that PDF attachment is available separately (not merged)
+
+6. **HTML Files** (`.html`, `.htm`)
+   - Parse and render HTML content directly into PDF
+   - Sanitize unsafe HTML (scripts, style tags)
+   - Preserve semantic markup (headings, lists, emphasis)
+   - Handle embedded images (fetch from data URIs)
+
+### Attachment Rendering Strategy
+
+```
+Email Body (always rendered)
+├─ Email headers (From/To/Subject/Date)
+├─ Body text (plain or HTML)
+├─ Inline images (multipart/related)
+└─ Attachments section (if any)
+    ├─ .txt attachment
+    │   └─ Rendered as code block
+    ├─ .csv attachment
+    │   └─ Rendered as table
+    ├─ .xlsx attachment
+    │   ├─ Sheet 1 (table)
+    │   ├─ Sheet 2 (table)
+    │   └─ ...
+    ├─ .docx attachment
+    │   └─ Text content extracted and formatted
+    ├─ .png/.jpg attachment
+    │   └─ Image embedded
+    ├─ .html attachment
+    │   └─ HTML rendered
+    └─ .pdf attachment
+        └─ Reference note (file not merged)
+```
+
+### Implementation Details
+
+#### Attachment Extraction (`mbox_converter.py`)
+
+```python
+def extract_attachments(self, email_message: Message) -> List[Attachment]:
+    """
+    Extract all attachments from email.
+    
+    Returns:
+        List of Attachment objects with:
+        - filename: str
+        - mime_type: str
+        - content: bytes (raw content)
+        - is_inline: bool (multipart/related vs multipart/mixed)
+    """
+
+def process_attachment(self, attachment: Attachment) -> str:
+    """
+    Convert attachment to HTML representation.
+    
+    Returns:
+        HTML string to embed in PDF. If attachment cannot be processed,
+        returns reference note instead.
+    """
+```
+
+#### Attachment Converters (`src/attachment_handlers/`)
+
+```python
+# Optional: Separate module for each handler
+handlers/
+├── __init__.py
+├── text_handler.py        # .txt
+├── csv_handler.py         # .csv (→ HTML table)
+├── xlsx_handler.py        # .xlsx (→ HTML tables)
+├── docx_handler.py        # .docx (→ HTML text)
+├── image_handler.py       # .png, .jpg, etc (→ base64 embed)
+├── html_handler.py        # .html (→ sanitized HTML)
+└── pdf_handler.py         # .pdf (→ reference note)
+```
+
+#### Handling Strategy for Complex Formats
+
+**XLSX (Excel)**:
+- Use `openpyxl` library to read workbook
+- For each sheet:
+  - Extract all used cells
+  - Evaluate formulas to values (not the formula strings)
+  - Convert to HTML `<table>`
+  - Apply basic styling: header bold/background
+- Skip: Charts, pivot tables, VBA, conditional formatting, data validation
+
+**DOCX (Word)**:
+- Use `python-docx` library to read document
+- Extract paragraphs preserving:
+  - Heading styles (convert to `<h1>`, `<h2>`, etc.)
+  - Text styling (bold → `<strong>`, italic → `<em>`)
+  - Lists (convert to `<ul>` or `<ol>`)
+  - Line breaks
+- Skip: Headers/footers, footnotes, tables (extract as text), images
+
+**CSV**:
+- Detect delimiter: Try comma, tab, semicolon (try each, pick best fit)
+- Use Python's `csv` module for robust parsing
+- Convert to HTML table with proper escaping
+- No styling needed, just clean structure
+
+### Error Handling for Attachments
+
+```python
+try:
+    attachment_html = process_attachment(attachment)
+except Exception as e:
+    # Log error with attachment filename and MIME type
+    logger.warning(f"Failed to process attachment {attachment.filename}: {e}")
+    # Render fallback reference note instead
+    attachment_html = render_attachment_reference(attachment)
+```
+
+**Fallback rendering** (if attachment cannot be processed):
+```html
+<div class="attachment-error">
+  <strong>Attachment:</strong> {filename}
+  <br/>
+  <small>(Type: {mime_type}, Size: {file_size_kb}KB)</small>
+  <br/>
+  <em>This attachment could not be rendered into the PDF.</em>
+</div>
+```
+
+### Dependencies for Attachment Handling
+
+Add to `requirements.txt`:
+```
+openpyxl>=3.10.0       # Excel (.xlsx)
+python-docx>=0.8.11    # Word (.docx)
+Pillow>=9.0.0          # Image processing
+bleach>=5.0.0          # HTML sanitization
+```
+
+### PDF Styling for Attachments
+
+```css
+.attachment-section {
+    margin-top: 20px;
+    padding: 10px;
+    border-top: 2px solid #333;
+    page-break-inside: avoid;
+}
+
+.attachment-header {
+    font-weight: bold;
+    margin-bottom: 10px;
+    background-color: #f0f0f0;
+    padding: 5px;
+}
+
+.attachment-content {
+    margin-left: 10px;
+}
+
+.csv-table, .xlsx-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 10pt;
+}
+
+.csv-table th, .xlsx-table th {
+    background-color: #e0e0e0;
+    font-weight: bold;
+    padding: 5px;
+    border: 1px solid #ccc;
+}
+
+.csv-table td, .xlsx-table td {
+    padding: 5px;
+    border: 1px solid #ccc;
+}
+
+.attachment-reference {
+    background-color: #fff3cd;
+    padding: 10px;
+    border-left: 4px solid #ffc107;
+    margin: 10px 0;
+}
+
+.attachment-error {
+    background-color: #f8d7da;
+    padding: 10px;
+    border-left: 4px solid #dc3545;
+    margin: 10px 0;
+    color: #721c24;
+}
+```
+
+---
+
 ## Implementation Plan
 
 ### Phase 1: Core Conversion Logic
+- [ ] Create comprehensive test fixtures (simple.mbox + complex.mbox with attachments)
 - [ ] Implement `MboxConverter` class
 - [ ] Implement email parsing from mbox files
 - [ ] Implement date grouping logic (month/quarter/year)
-- [ ] Implement HTML email rendering
-- [ ] Implement PDF generation with weasyprint
-- [ ] Write comprehensive unit tests
+- [ ] Implement basic HTML email rendering
+- [ ] Write behavioral tests for all above (test-first)
 
-**Deliverable**: `src/mbox_converter.py` + `tests/test_mbox_converter.py`
+**Deliverable**: `src/mbox_converter.py` + `tests/test_mbox_converter.py` with 40+ passing tests
 
-### Phase 2: GUI Application
+### Phase 2: Attachment Handling
+- [ ] Implement text file attachment rendering
+- [ ] Implement image attachment embedding (PNG, JPG, GIF, WebP)
+- [ ] Implement CSV attachment → HTML table conversion
+- [ ] Implement XLSX attachment → HTML tables conversion (openpyxl)
+- [ ] Implement DOCX attachment → HTML text extraction (python-docx)
+- [ ] Implement HTML attachment rendering (bleach sanitization)
+- [ ] Implement PDF attachment reference notes
+- [ ] Write behavioral tests for each attachment type (test-first)
+- [ ] Error handling and fallback rendering for unsupported formats
+
+**Deliverable**: Attachment handlers + 30+ attachment-specific tests + updated complex.mbox fixture
+
+### Phase 3: PDF Generation
+- [ ] Implement HTML → PDF rendering with weasyprint
+- [ ] Implement email header rendering (From/To/Subject/Date/CC)
+- [ ] Implement page breaks and multi-page handling
+- [ ] Implement CSS styling for clean PDF output
+- [ ] Implement multiple emails concatenation in single PDF
+- [ ] Write behavioral tests for PDF output
+- [ ] Test with complex.mbox (emails with attachments)
+
+**Deliverable**: PDF generation + 20+ PDF-specific tests
+
+### Phase 4: GUI Application
 - [ ] Implement `MainWindow` with 5-step wizard
 - [ ] Implement folder/file selection dialogs
 - [ ] Implement progress tracking and display
 - [ ] Implement error modal with copy/save functionality
 - [ ] Integrate conversion logic with UI
-- [ ] Test with sample.mbox file
+- [ ] Test with sample.mbox and complex.mbox files
 
-**Deliverable**: `src/gui.py` + manual testing
+**Deliverable**: `src/gui.py` + manual testing completed
 
-### Phase 3: Error Handling & Logging
+### Phase 5: Error Handling & Logging
 - [ ] Implement comprehensive error capture
 - [ ] Implement log formatting for display/export
-- [ ] Handle edge cases (bad encodings, corrupted mbox, etc.)
-- [ ] Test error scenarios
+- [ ] Handle edge cases (bad encodings, corrupted mbox, malformed headers)
+- [ ] Test error scenarios with complex fixture
 
-**Deliverable**: `src/utils.py` + error integration
+**Deliverable**: `src/utils.py` + error handling integration
 
-### Phase 4: Distribution & CI/CD
+### Phase 6: Distribution & CI/CD
 - [ ] Set up PyInstaller configuration
-- [ ] Configure GitHub Actions workflow
-- [ ] Build and test on all platforms
+- [ ] Configure GitHub Actions workflow for multi-platform builds
+- [ ] Build and test on Windows, macOS, Linux
 - [ ] Generate .exe, .dmg, AppImage artifacts
 
 **Deliverable**: Standalone executables in CI/CD pipeline
 
-### Phase 5: Documentation & Polish
+### Phase 7: Documentation & Polish
 - [ ] Write user guide
 - [ ] Create example screenshots
 - [ ] Security audit checklist
@@ -342,41 +598,174 @@ def validate_output_directory(path: str) -> bool:
 
 ## Testing Strategy
 
+### Test-Driven Development Approach
+
+**Core Principle**: For each feature, implement behavioral tests FIRST, then implementation code.
+
+**Workflow**:
+1. Write acceptance/behavioral test in `tests/test_mbox_converter.py`
+2. Run test (should fail—no implementation yet)
+3. Implement feature in `src/mbox_converter.py`
+4. Run test until passing
+5. Commit feature + test together
+
+This ensures:
+- Clear specification of expected behavior
+- 100% test coverage
+- Tests serve as executable documentation
+- Regressions caught immediately
+
+### Test Fixtures
+
+#### `sample_data/simple.mbox`
+- 2 plain-text emails (no attachments)
+- Dates spanning Jan 4-5, 2008
+- Purpose: Basic parsing, grouping, HTML rendering tests
+
+#### `sample_data/complex.mbox` (NEW)
+- Multi-part emails with various attachment types
+- HTML emails with inline images
+- Mixed encodings and charsets
+- Malformed headers and edge cases
+- Contains:
+  - Email with `.txt` attachment (plain text file)
+  - Email with `.csv` attachment (spreadsheet data)
+  - Email with `.xlsx` attachment (Excel workbook)
+  - Email with `.docx` attachment (Word document)
+  - Email with `.pdf` attachment (PDF document)
+  - Email with image attachments (`.png`, `.jpg`)
+  - Email with `.html` attachment (standalone HTML)
+  - Email with `multipart/mixed` and `multipart/related` structures
+  - Email with inline base64-encoded content
+
 ### Unit Tests (`tests/test_mbox_converter.py`)
 
+#### Parsing Tests
 ```python
-def test_parse_simple_email():
-    """Parse single email from sample.mbox."""
+def test_parse_simple_email(simple_fixture):
+    """Parse single plain-text email from simple.mbox."""
     
-def test_parse_multiple_emails():
-    """Parse all emails from sample.mbox."""
+def test_parse_multiple_emails(simple_fixture):
+    """Parse all emails from simple.mbox."""
     
-def test_group_by_month():
+def test_parse_email_with_attachments(complex_fixture):
+    """Parse email with multiple attachment types."""
+    
+def test_extract_all_attachment_types(complex_fixture):
+    """Extract text, csv, xlsx, docx, pdf, images, html."""
+    
+def test_handle_missing_headers(complex_fixture):
+    """Gracefully handle missing Date/From/Subject headers."""
+    
+def test_handle_unusual_encoding(complex_fixture):
+    """Parse UTF-8, Latin-1, mixed and declared charsets."""
+```
+
+#### Grouping Tests
+```python
+def test_group_by_month(complex_fixture):
     """Emails grouped correctly by calendar month."""
     
-def test_group_by_quarter():
+def test_group_by_quarter(complex_fixture):
     """Emails grouped correctly by quarter."""
     
-def test_group_by_year():
+def test_group_by_year(complex_fixture):
     """Emails grouped correctly by year."""
     
-def test_html_rendering():
-    """Email converts to valid HTML."""
+def test_empty_groups_not_created(complex_fixture):
+    """Months/quarters/years with no emails not created."""
+```
+
+#### Rendering Tests
+```python
+def test_plain_text_email_to_html(simple_fixture):
+    """Plain text email converts to valid HTML."""
     
-def test_pdf_generation():
-    """HTML generates valid PDF file."""
+def test_html_email_preserved(complex_fixture):
+    """HTML email body preserved in output."""
     
-def test_malformed_email():
-    """Gracefully handle malformed headers."""
+def test_inline_images_embedded(complex_fixture):
+    """Inline images rendered in PDF (base64 embedded)."""
     
-def test_unusual_encoding():
-    """Handle UTF-8, Latin-1, mixed encodings."""
+def test_text_attachment_rendered(complex_fixture):
+    """Text attachment rendered as section in PDF."""
     
-def test_large_mbox_file():
-    """Performance with 1000+ emails."""
+def test_csv_attachment_formatted_as_table(complex_fixture):
+    """CSV rendered as formatted HTML table in PDF."""
     
-def test_empty_mbox_file():
-    """Handle empty mbox gracefully."""
+def test_xlsx_attachment_rendered_as_sheet(complex_fixture):
+    """Excel sheet rendered as table; formulas evaluated to values."""
+    
+def test_docx_attachment_converted_to_text(complex_fixture):
+    """DOCX content extracted and formatted in PDF."""
+    
+def test_pdf_attachment_included_as_reference(complex_fixture):
+    """PDF attachment noted with filename/size in PDF."""
+    
+def test_image_attachment_embedded(complex_fixture):
+    """Image attachment (.png, .jpg) embedded in PDF."""
+    
+def test_html_attachment_rendered(complex_fixture):
+    """HTML attachment content rendered in PDF."""
+```
+
+#### PDF Generation Tests
+```python
+def test_pdf_generation_creates_file(complex_fixture):
+    """HTML → PDF conversion produces valid PDF file."""
+    
+def test_pdf_includes_headers(complex_fixture):
+    """PDF includes From/To/Subject/Date in header."""
+    
+def test_pdf_page_breaks(complex_fixture):
+    """Large emails break appropriately across pages."""
+    
+def test_multiple_emails_concatenated(complex_fixture):
+    """Multiple grouped emails concatenated in single PDF."""
+    
+def test_pdf_is_readable(complex_fixture):
+    """Generated PDF can be opened and displays correctly."""
+```
+
+#### Error Handling Tests
+```python
+def test_malformed_mbox_file(complex_fixture):
+    """Gracefully handle malformed mbox structure."""
+    
+def test_missing_mbox_file():
+    """Proper error when mbox file doesn't exist."""
+    
+def test_empty_mbox_file(complex_fixture):
+    """Handle empty mbox without crashing."""
+    
+def test_corrupted_attachment_skipped(complex_fixture):
+    """Corrupted attachment skipped with warning in logs."""
+    
+def test_unrecognized_attachment_type_handled(complex_fixture):
+    """Unknown MIME types handled gracefully."""
+    
+def test_large_mbox_performance(complex_fixture):
+    """1000+ emails convert in < 30 seconds."""
+```
+
+### Fixtures
+
+#### Pytest Fixtures
+```python
+@pytest.fixture
+def simple_fixture(tmp_path):
+    """Path to sample_data/simple.mbox for basic tests."""
+    return Path(__file__).parent.parent / "sample_data" / "simple.mbox"
+
+@pytest.fixture
+def complex_fixture(tmp_path):
+    """Path to sample_data/complex.mbox for comprehensive tests."""
+    return Path(__file__).parent.parent / "sample_data" / "complex.mbox"
+
+@pytest.fixture
+def temp_output_dir(tmp_path):
+    """Temporary directory for PDF output."""
+    return tmp_path / "output"
 ```
 
 ### Manual Testing
@@ -384,8 +773,10 @@ def test_empty_mbox_file():
 1. **Happy path**: Select Takeout folder → convert all files → check PDFs
 2. **Partial selection**: Deselect some files → convert → verify only selected converted
 3. **Different groupings**: Test month/quarter/year grouping outputs
-4. **Error handling**: Try invalid folder, full disk, etc. → check error modal
-5. **GUI flow**: Test back buttons, navigation between steps
+4. **Attachment handling**: Convert email with mixed attachments → verify PDF includes all
+5. **Error handling**: Try invalid folder, full disk, corrupted file → check error modal
+6. **GUI flow**: Test back buttons, navigation between steps
+7. **Large files**: Convert 1000+ email mbox → verify performance and output
 
 ---
 
