@@ -1,0 +1,63 @@
+name: Build Executables
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11']
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Run tests
+      run: |
+        pytest tests/
+    
+    - name: Build executable (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        pyinstaller --onefile --windowed --name "mbox-to-pdf" src/gui.py
+        mkdir -p build/windows
+        move dist/mbox-to-pdf.exe build/windows/
+    
+    - name: Build executable (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        pyinstaller --onefile --windowed --name "mbox-to-pdf" src/gui.py
+        mkdir -p build/macos
+        mv dist/mbox-to-pdf build/macos/
+    
+    - name: Build executable (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        pyinstaller --onefile --windowed --name "mbox-to-pdf" src/gui.py
+        mkdir -p build/linux
+        mv dist/mbox-to-pdf build/linux/
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: mbox-to-pdf-${{ matrix.os }}
+        path: build/
