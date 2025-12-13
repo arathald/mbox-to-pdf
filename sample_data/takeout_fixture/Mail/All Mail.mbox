@@ -1,3 +1,44 @@
+From alice@example.com Fri Jan 04 2008 09:30:00 -0500
+Date: Fri, 04 Jan 2008 09:30:00 -0500
+From: Alice Smith <alice@example.com>
+To: bob@example.com
+Subject: Happy New Year!
+Message-ID: <simple001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hi Bob,
+
+Happy New Year! Hope you had a great holiday season.
+
+Looking forward to working together in 2008.
+
+Best,
+Alice
+
+From bob@example.com Sat Jan 05 2008 14:15:00 -0500
+Date: Sat, 05 Jan 2008 14:15:00 -0500
+From: Bob Jones <bob@example.com>
+To: alice@example.com
+Subject: Re: Happy New Year!
+Message-ID: <simple002@example.com>
+In-Reply-To: <simple001@example.com>
+References: <simple001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hi Alice,
+
+Thanks! Same to you. The holidays were great - spent time with family.
+
+Ready to hit the ground running this year. Let's schedule a sync
+next week to discuss Q1 priorities.
+
+Cheers,
+Bob
+
 From alice@example.com Tue Jan 10 2008 10:00:00 -0500
 Date: Tue, 10 Jan 2008 10:00:00 -0500
 From: alice@example.com
