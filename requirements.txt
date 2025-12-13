@@ -1,9 +1,8 @@
 # Core dependencies
-weasyprint==62.3
-# Alternative: reportlab==4.0.9 (if using reportlab instead of weasyprint)
+xhtml2pdf>=0.2.11       # Pure Python HTML→PDF (no native deps, easy distribution)
 
 # Attachment handling
-openpyxl>=3.10.0        # Excel (.xlsx) files
+openpyxl>=3.1.0         # Excel (.xlsx) files
 python-docx>=0.8.11     # Word (.docx) files
 Pillow>=9.0.0           # Image processing and embedding
 bleach>=5.0.0           # HTML sanitization

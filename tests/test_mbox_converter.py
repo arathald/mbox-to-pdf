@@ -589,17 +589,7 @@ class TestEmailToHtml:
 
 
 class TestPdfGeneration:
-    """Tests for PDF generation with WeasyPrint."""
-
-    @pytest.fixture(autouse=True)
-    def check_weasyprint(self):
-        """Skip tests if WeasyPrint native deps aren't available."""
-        try:
-            from weasyprint import HTML
-        except OSError as e:
-            if "cannot load library" in str(e):
-                pytest.skip("WeasyPrint native dependencies not installed (brew install pango)")
-            raise
+    """Tests for PDF generation with xhtml2pdf."""
 
     def test_generate_pdf_creates_file(self, simple_fixture, temp_output_dir):
         """generate_pdf should create a PDF file."""

@@ -465,9 +465,9 @@ body {
 
 
 def generate_pdf(html_content: str, output_path: Path) -> Path:
-    """Generate a PDF from HTML content using WeasyPrint.
+    """Generate a PDF from HTML content using xhtml2pdf.
 
-    All processing is local—no network calls.
+    All processing is local—no network calls, no native dependencies.
 
     Args:
         html_content: HTML string to render
@@ -475,8 +475,11 @@ def generate_pdf(html_content: str, output_path: Path) -> Path:
 
     Returns:
         The output path (for chaining)
+
+    Raises:
+        RuntimeError: If PDF generation fails
     """
-    from weasyprint import HTML
+    from xhtml2pdf import pisa
 
     # Wrap content in full HTML document with styles
     full_html = f"""<!DOCTYPE html>
@@ -492,10 +495,14 @@ def generate_pdf(html_content: str, output_path: Path) -> Path:
 """
 
     # Generate PDF
-    html_doc = HTML(string=full_html)
-    html_doc.write_pdf(output_path)
+    output_path = Path(output_path)
+    with open(output_path, "wb") as pdf_file:
+        pisa_status = pisa.CreatePDF(full_html, dest=pdf_file)
 
-    return Path(output_path)
+    if pisa_status.err:
+        raise RuntimeError(f"PDF generation failed with {pisa_status.err} errors")
+
+    return output_path
 
 
 def group_emails_by_date(

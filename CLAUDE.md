@@ -8,8 +8,8 @@
 
 ## Tech Stack
 
-- **Language**: Python 3.x
-- **PDF Generation**: WeasyPrint (HTML → PDF rendering)
+- **Language**: Python 3.12+
+- **PDF Generation**: xhtml2pdf (pure Python HTML → PDF, no native deps)
 - **GUI Framework**: Tkinter (stdlib, cross-platform)
 - **Email Parsing**: Python stdlib `mailbox` module
 - **Attachment Handling**:
@@ -42,17 +42,21 @@ mbox-to-pdf/
 ## Key Commands
 
 ```bash
+# Create and activate virtual environment (first time)
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
 # Install dependencies
 pip install -r requirements.txt
 
 # Run tests
-pytest tests/
+PYTHONPATH=. pytest tests/
 
 # Run tests with coverage
-pytest tests/ --cov=src --cov-report=html
+PYTHONPATH=. pytest tests/ --cov=src --cov-report=html
 
 # Run the GUI application
-python src/gui.py
+PYTHONPATH=. python src/gui.py
 
 # Lint/format
 black src/ tests/
@@ -128,21 +132,24 @@ Generated PDFs preserve complete email metadata:
 
 ## Implementation Status
 
-The project is in early stages:
+Core API complete (68 tests passing):
 - [x] Project scaffolding and structure
 - [x] Comprehensive design specification (DESIGN.md)
 - [x] Test fixtures (simple.mbox, complex.mbox, takeout_fixture)
-- [ ] Core mbox parsing implementation
-- [ ] PDF generation with WeasyPrint
-- [ ] Date grouping logic (month/quarter/year)
-- [ ] Attachment handlers
-- [ ] GUI implementation
+- [x] Core mbox parsing (`parse_mbox`, `merge_and_deduplicate`)
+- [x] PDF generation with xhtml2pdf (`generate_pdf`)
+- [x] Date grouping logic (`group_emails_by_date` - month/quarter/year)
+- [x] Attachment rendering (text, CSV, images, references)
+- [x] Email-to-HTML rendering (`render_email_to_html`)
+- [ ] High-level `convert_mbox_to_pdf()` orchestration function
+- [ ] Continuation headers for multi-page emails
+- [ ] GUI implementation (5-step wizard)
 - [ ] Error handling system
 - [ ] CI/CD build pipeline
 
 ## Important Design Decisions
 
-1. **WeasyPrint over ReportLab**: Better for HTML → PDF (emails are HTML-centric)
+1. **xhtml2pdf over WeasyPrint**: Pure Python with no native dependencies, enabling easy cross-platform distribution via PyInstaller. Adequate CSS support for email-centric HTML rendering.
 2. **Tkinter for GUI**: Stdlib, cross-platform, sufficient for wizard workflow
 3. **No external network calls**: Privacy-first, all processing local
 4. **API returns structured results**: ConversionResult dataclass, not exceptions for flow control
