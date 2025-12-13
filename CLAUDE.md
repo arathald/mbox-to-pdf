@@ -132,7 +132,7 @@ Generated PDFs preserve complete email metadata:
 
 ## Implementation Status
 
-Core API complete (68 tests passing):
+Core API complete (78 tests passing):
 - [x] Project scaffolding and structure
 - [x] Comprehensive design specification (DESIGN.md)
 - [x] Test fixtures (simple.mbox, complex.mbox, takeout_fixture)
@@ -141,7 +141,7 @@ Core API complete (68 tests passing):
 - [x] Date grouping logic (`group_emails_by_date` - month/quarter/year)
 - [x] Attachment rendering (text, CSV, images, references)
 - [x] Email-to-HTML rendering (`render_email_to_html`)
-- [ ] High-level `convert_mbox_to_pdf()` orchestration function
+- [x] High-level orchestration (`convert_mbox_to_pdfs` with progress callback)
 - [ ] Continuation headers for multi-page emails
 - [ ] GUI implementation (5-step wizard)
 - [ ] Error handling system

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 
 @dataclass
@@ -85,6 +85,24 @@ class Email:
     attachments: List[Attachment] = field(default_factory=list)
     headers: Dict[str, str] = field(default_factory=dict)
     x_mailer: Optional[str] = None
+
+
+@dataclass
+class ConversionResult:
+    """Result of a mbox-to-PDF conversion operation.
+
+    Attributes:
+        success: True if conversion completed without fatal errors
+        pdfs_created: Number of PDF files successfully created
+        emails_processed: Total number of emails processed
+        errors: List of human-readable error messages
+        created_files: List of paths to generated PDF files
+    """
+    success: bool
+    pdfs_created: int
+    emails_processed: int = 0
+    errors: List[str] = field(default_factory=list)
+    created_files: List[str] = field(default_factory=list)
 
 
 def render_attachment(attachment: Attachment) -> str:
@@ -790,4 +808,112 @@ def _parse_attachment(part) -> Optional[Attachment]:
         mime_type=mime_type,
         size_bytes=size_bytes,
         raw_content=payload,
+    )
+
+
+def convert_mbox_to_pdfs(
+    mbox_paths: List[Path],
+    output_dir: Path,
+    grouping_strategy: str = "month",
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> ConversionResult:
+    """Convert mbox files to grouped PDF documents.
+
+    This is the main orchestration function that ties together parsing,
+    deduplication, grouping, rendering, and PDF generation.
+
+    All processing is local—no network calls, no telemetry.
+
+    Args:
+        mbox_paths: List of paths to mbox files to convert
+        output_dir: Directory where PDFs will be saved
+        grouping_strategy: One of "month", "quarter", or "year"
+        progress_callback: Optional function called with (current, total, message)
+            to report progress for GUI updates
+
+    Returns:
+        ConversionResult with success status, counts, and file paths
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    errors: List[str] = []
+    created_files: List[str] = []
+
+    # Step 1: Parse and deduplicate emails from all mbox files
+    if progress_callback:
+        progress_callback(0, 100, "Parsing mbox files...")
+
+    try:
+        emails = merge_and_deduplicate(mbox_paths)
+    except Exception as e:
+        return ConversionResult(
+            success=False,
+            pdfs_created=0,
+            emails_processed=0,
+            errors=[f"Failed to parse mbox files: {e}"],
+            created_files=[],
+        )
+
+    if not emails:
+        return ConversionResult(
+            success=True,
+            pdfs_created=0,
+            emails_processed=0,
+            errors=["No emails found in the provided mbox files"],
+            created_files=[],
+        )
+
+    emails_processed = len(emails)
+
+    if progress_callback:
+        progress_callback(10, 100, f"Found {emails_processed} emails, grouping...")
+
+    # Step 2: Group emails by date
+    groups = group_emails_by_date(emails, grouping_strategy)
+
+    if progress_callback:
+        progress_callback(20, 100, f"Creating {len(groups)} PDF files...")
+
+    # Step 3: Generate PDF for each group
+    total_groups = len(groups)
+    for i, (group_key, group_emails) in enumerate(groups.items()):
+        if progress_callback:
+            progress_pct = 20 + int((i / total_groups) * 75)
+            progress_callback(progress_pct, 100, f"Generating {group_key}.pdf...")
+
+        # Render all emails in this group to HTML
+        html_parts = []
+        for email in group_emails:
+            try:
+                email_html = render_email_to_html(email)
+                html_parts.append(email_html)
+            except Exception as e:
+                errors.append(f"Failed to render email '{email.subject}': {e}")
+
+        if not html_parts:
+            errors.append(f"No emails rendered for group {group_key}")
+            continue
+
+        combined_html = "\n".join(html_parts)
+
+        # Generate PDF
+        pdf_filename = f"{group_key}.pdf"
+        pdf_path = output_dir / pdf_filename
+
+        try:
+            generate_pdf(combined_html, pdf_path)
+            created_files.append(str(pdf_path))
+        except Exception as e:
+            errors.append(f"Failed to generate PDF for {group_key}: {e}")
+
+    if progress_callback:
+        progress_callback(100, 100, "Conversion complete")
+
+    return ConversionResult(
+        success=len(created_files) > 0,
+        pdfs_created=len(created_files),
+        emails_processed=emails_processed,
+        errors=errors,
+        created_files=created_files,
     )

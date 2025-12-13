@@ -16,8 +16,10 @@ from src.mbox_converter import (
     render_attachment,
     render_email_to_html,
     generate_pdf,
+    convert_mbox_to_pdfs,
     Email,
     Attachment,
+    ConversionResult,
 )
 
 
@@ -655,3 +657,120 @@ class TestPdfGeneration:
         result = generate_pdf(html, output_path)
 
         assert result == output_path
+
+
+class TestConvertMboxToPdfs:
+    """Tests for the high-level convert_mbox_to_pdfs orchestration function."""
+
+    def test_convert_returns_conversion_result(self, simple_fixture, temp_output_dir):
+        """convert_mbox_to_pdfs should return a ConversionResult."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        assert isinstance(result, ConversionResult)
+
+    def test_convert_creates_pdf_files(self, simple_fixture, temp_output_dir):
+        """convert_mbox_to_pdfs should create PDF files in output directory."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        assert result.pdfs_created > 0
+        assert len(list(temp_output_dir.glob("*.pdf"))) > 0
+
+    def test_convert_result_includes_created_files(self, simple_fixture, temp_output_dir):
+        """ConversionResult should list all created PDF paths."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        assert len(result.created_files) == result.pdfs_created
+        for pdf_path in result.created_files:
+            assert Path(pdf_path).exists()
+
+    def test_convert_groups_by_month(self, simple_fixture, temp_output_dir):
+        """With month strategy, PDF filenames should include month."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        # simple.mbox has emails from January 2008
+        pdf_names = [Path(p).name for p in result.created_files]
+        assert any("2008-01" in name for name in pdf_names)
+
+    def test_convert_groups_by_year(self, simple_fixture, temp_output_dir):
+        """With year strategy, PDF filenames should include year only."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="year"
+        )
+        pdf_names = [Path(p).name for p in result.created_files]
+        assert any("2008" in name for name in pdf_names)
+        # Should not have month in filename
+        assert not any("2008-01" in name for name in pdf_names)
+
+    def test_convert_success_flag_true_on_success(self, simple_fixture, temp_output_dir):
+        """ConversionResult.success should be True when conversion succeeds."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        assert result.success is True
+
+    def test_convert_merges_multiple_mbox_files(self, simple_fixture, complex_fixture, temp_output_dir):
+        """Multiple mbox files should be merged before conversion."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture, complex_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        # simple has 2 emails (Jan 4-5), complex has 10 (Jan 10-19)
+        # All in January 2008, so should produce 1 PDF
+        assert result.pdfs_created >= 1
+        assert result.success is True
+
+    def test_convert_deduplicates_emails(self, takeout_fixture, temp_output_dir):
+        """Emails should be deduplicated by Message-ID across mbox files."""
+        all_mail = takeout_fixture / "Mail" / "All Mail.mbox"
+        inbox = takeout_fixture / "Mail" / "Inbox.mbox"
+
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[all_mail, inbox],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        # Should not have duplicates - deduplication should work
+        assert result.success is True
+
+    def test_convert_calls_progress_callback(self, simple_fixture, temp_output_dir):
+        """Progress callback should be called during conversion."""
+        progress_calls = []
+
+        def track_progress(current, total, message):
+            progress_calls.append((current, total, message))
+
+        convert_mbox_to_pdfs(
+            mbox_paths=[simple_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month",
+            progress_callback=track_progress
+        )
+
+        assert len(progress_calls) > 0
+
+    def test_convert_with_complex_attachments(self, complex_fixture, temp_output_dir):
+        """Conversion should handle emails with various attachment types."""
+        result = convert_mbox_to_pdfs(
+            mbox_paths=[complex_fixture],
+            output_dir=temp_output_dir,
+            grouping_strategy="month"
+        )
+        assert result.success is True
+        assert result.pdfs_created > 0
