@@ -132,6 +132,12 @@ dmypy.json
 # macOS
 .DS_Store
 
+# Claude Adventure Mode
+.ADVENTURE_MODE.md
+
+# Temporary files
+tmp/
+
 # Output PDFs and logs
 output/
 *.pdf

@@ -35,6 +35,11 @@
   - **Calendar Year**: One PDF per year (e.g., `2008.pdf`)
 - Apply grouping strategy to all selected mbox files
 
+**Multi-file Merging**: When multiple MBOX files are selected in Step 2, their emails are **merged** before grouping. All emails from all selected files are combined, sorted by date, then grouped into output PDFs. This means:
+- `All Mail.mbox` + `Sent Mail.mbox` → emails merged → grouped by month → `2008-01-January.pdf`, etc.
+- Duplicate emails (same Message-ID) are deduplicated
+- Output filenames do NOT include source MBOX names—all selected files contribute to the same output PDFs
+
 #### 4. Output Folder Selection (Step 4)
 - File browser dialog
 - User selects where to save output PDFs
@@ -406,71 +411,51 @@ Alice</pre>
 
 **Scenario**: Email with `In-Reply-To` or `References` headers indicates it's part of a thread.
 
-**Rendering**:
-1. **Single email in thread**: Show header with In-Reply-To reference
-2. **All thread emails in same PDF**: Show conversation chronologically
-3. **Thread attribution**: Each message in thread clearly shows sender and date
+**Design Decision**: Display threading *metadata* only—do not attempt to reconstruct threads by matching Message-IDs across emails. Thread reconstruction is complex (emails may span multiple MBOX files or be missing) and is out of scope for v1.
 
-**Example (Multiple emails in thread)**:
+**Rendering**:
+1. **Single email in thread**: Show header with In-Reply-To and References fields visible
+2. **Threading metadata only**: Display the Message-ID, In-Reply-To, and References headers as-is for forensic reference
+3. **No thread reconstruction**: Emails are rendered in date order within their grouping period, not grouped by conversation
+
+**Example (Email with thread metadata displayed)**:
 
 ```html
-<!-- Email 1 (oldest) -->
 <div class="email-message">
   <div class="email-header">
-    Date: January 10, 2008 at 9:00 AM
-    From: alice@example.com
-    To: bob@example.com
-    Subject: Q1 Budget
-  </div>
-  <div class="email-body">
-    We need to finalize the Q1 budget...
-  </div>
-</div>
-
-<div class="thread-separator">
-  ↓ Reply from Bob (January 10, 2008 at 10:30 AM)
-</div>
-
-<!-- Email 2 (reply) -->
-<div class="email-message">
-  <div class="email-header">
-    Date: January 10, 2008 at 10:30 AM
-    From: bob@example.com
-    To: alice@example.com
-    Subject: Re: Q1 Budget
+    <div class="header-field">
+      <span class="header-label">Date:</span>
+      <span class="header-value">Tuesday, January 10, 2008 at 10:30 AM</span>
+    </div>
+    <div class="header-field">
+      <span class="header-label">From:</span>
+      <span class="header-value">bob@example.com</span>
+    </div>
+    <div class="header-field">
+      <span class="header-label">To:</span>
+      <span class="header-value">alice@example.com</span>
+    </div>
+    <div class="header-field">
+      <span class="header-label">Subject:</span>
+      <span class="header-value">Re: Q1 Budget</span>
+    </div>
+    <div class="header-field">
+      <span class="header-label">Message-ID:</span>
+      <span class="header-value">&lt;reply-002@example.com&gt;</span>
+    </div>
+    <div class="header-field">
+      <span class="header-label">In-Reply-To:</span>
+      <span class="header-value">&lt;original-001@example.com&gt;</span>
+    </div>
+    <div class="header-field">
+      <span class="header-label">References:</span>
+      <span class="header-value">&lt;original-001@example.com&gt;</span>
+    </div>
   </div>
   <div class="email-body">
     I've reviewed the numbers. Some questions on Marketing...
   </div>
 </div>
-
-<div class="thread-separator">
-  ↓ Reply from Alice (January 10, 2008 at 3:00 PM)
-</div>
-
-<!-- Email 3 (counter-reply) -->
-<div class="email-message">
-  ...
-</div>
-```
-
-**CSS for Threading**:
-```css
-.email-message {
-  margin: 0 0 30px 0;
-  page-break-inside: avoid;
-}
-
-.thread-separator {
-  text-align: center;
-  margin: 25px 0;
-  padding: 8px 0;
-  border-top: 1px dashed #ccc;
-  border-bottom: 1px dashed #ccc;
-  font-size: 9pt;
-  color: #999;
-  font-style: italic;
-}
 ```
 
 ### Page Layout & Breaks
@@ -522,42 +507,25 @@ body {
 
 **Scenario**: Single email is multiple pages long (e.g., forwarded thread or long body).
 
+**Implementation Strategy**: Post-processing PDF merge approach.
+1. Each email is rendered to its own intermediate PDF file (in temp directory)
+2. After rendering, page numbers are added to each email's PDF
+3. Continuation headers are added to pages 2+ of multi-page emails
+4. All email PDFs for a grouping period are concatenated into the final output PDF
+
+This approach is required because WeasyPrint doesn't natively support injecting content mid-flow based on page breaks.
+
 **Rendering**:
 - **Page 1**: Email header + start of body
-- **Page 2+**: Continuation of email body
-- **Header on continuation pages**: Repeat email subject at top of each page (optional, for legal documents)
+- **Page 2+**: Continuation header at top: `[Continued: {Subject} - Page {N}]`
+- **Final PDF**: All emails concatenated with proper page numbering
 
-```html
-<!-- Page 1 -->
-<div class="email-message">
-  <div class="email-header">
-    From: alice@example.com
-    Subject: Project Proposal with History
-  </div>
-  <div class="email-body">
-    Here is the full project proposal including all historical emails...
-    [Page 1 content]
-  </div>
-</div>
-
-<!-- Page 2 (automatic page break) -->
-<div class="continuation-header">
-  [Continued: Project Proposal with History - Page 2]
-</div>
-<div class="email-body-continuation">
-  [Page 2 content - body continues]
-</div>
-
-<!-- Page 3 (attachments start) -->
-<div class="continuation-header">
-  [Continued: Project Proposal with History - Attachments]
-</div>
-<div class="attachments-section">
-  <!-- Embedded attachments -->
-</div>
+**Example continuation header** (added via post-processing):
+```
+[Continued: Project Proposal with History - Page 2]
 ```
 
-**CSS for Continuation Pages**:
+**CSS for Continuation Headers** (injected during post-processing):
 ```css
 .continuation-header {
   font-size: 9pt;
@@ -566,13 +534,6 @@ body {
   padding-bottom: 6px;
   margin-bottom: 12px;
   font-style: italic;
-  page-break-after: avoid;
-}
-
-@media print {
-  .continuation-header {
-    display: block;  /* Show continuation markers in print */
-  }
 }
 ```
 
@@ -1206,12 +1167,34 @@ When an attachment cannot be processed, the application displays a **user-friend
 - **Unsupported format variant**: "This variant of the file format is not supported. (e.g., password-protected Excel)"
 
 **Implementation Details**:
-- Dialog appears during conversion (Step 5)
-- Non-blocking: User can click OK and conversion continues
+- Fatal errors: Show modal dialog immediately, halt conversion
+- Warnings (attachment failures): Accumulate and display in warnings panel
 - Does NOT include technical exception messages (user-friendly only)
 - Full technical error logged to conversion logs for support/debugging
 - Attachment still included in PDF as reference note (not skipped)
-- Multiple attachment errors show one dialog per error (or batch summary option)
+
+**Warning Panel UX** (Step 5 - Progress Screen):
+- Warnings panel visible during conversion if any warnings occur
+- Clickable warning icon/badge shows count: "⚠ 3 warnings"
+- Clicking expands to show scrollable list of warnings
+- Each warning shows: email subject, attachment filename, brief error message
+- Panel persists after conversion completes for review
+- Example: "Failed to process 5 attachments:" followed by list
+
+**Batched Warning Summary** (shown in panel, not individual dialogs):
+```
+┌─────────────────────────────────────────────────────────┐
+│ ⚠ Warnings (5 attachments could not be processed)       │
+├─────────────────────────────────────────────────────────┤
+│ ▸ budget_2008.xlsx in "Q1 Planning" - Password protected│
+│ ▸ photo.heic in "Vacation pics" - Unsupported format    │
+│ ▸ data.csv in "Monthly report" - Encoding error         │
+│ ▸ notes.txt in "Meeting notes" - File corrupted         │
+│ ▸ chart.xlsx in "Sales update" - Password protected     │
+├─────────────────────────────────────────────────────────┤
+│ These attachments are included as reference notes only. │
+└─────────────────────────────────────────────────────────┘
+```
 
 **Types of Attachments Requiring Error Dialogs**:
 1. **Text files**: Encoding errors, binary file instead of text
@@ -1514,26 +1497,38 @@ Test fixtures are located in `sample_data/` directory and referenced via pytest 
 #### `sample_data/takeout_fixture/`
 - **Location**: `sample_data/takeout_fixture/` (directory structure)
 - **Fixture reference**: `takeout_fixture` (pytest fixture)
-- **Purpose**: Realistic Gmail Takeout export structure for testing folder selection and multi-file conversion
-- **Structure**: Mirrors actual Gmail Takeout directory layout
+- **Purpose**: Realistic Gmail Takeout export structure for testing folder selection, multi-file conversion, and deduplication
+- **Structure**: Mirrors actual Gmail Takeout directory layout where emails appear in multiple MBOX files
 
 **Directory Structure**:
 ```
 takeout_fixture/
 ├── Mail/
-│   ├── All Mail.mbox         (19 emails - all messages)
-│   ├── Drafts.mbox           (6 emails - user drafts)
-│   ├── Sent Mail.mbox        (6 emails - sent messages)
+│   ├── All Mail.mbox         (21 emails - canonical store: simple + complex)
+│   ├── Inbox.mbox            (2 emails - simple.mbox content, dupes of All Mail)
+│   ├── Work Projects.mbox    (10 emails - complex.mbox content, dupes of All Mail)
+│   ├── Drafts.mbox           (6 emails - subset of All Mail)
+│   ├── Sent Mail.mbox        (6 emails - subset of All Mail)
 │   └── Project Notes.mbox    (6 emails - custom label)
 └── [Gmail]/
     ├── Important.mbox        (4 emails - Gmail system label)
     └── Spam.mbox             (0 emails - empty folder test)
 ```
 
+**Deduplication Test Scenarios**:
+- `All Mail.mbox` contains: simple001, simple002, 001-009, meeting-recording (21 unique)
+- `Inbox.mbox` contains: simple001, simple002 (2 emails, all dupes of All Mail)
+- `Work Projects.mbox` contains: 001-009, meeting-recording (10 emails, all dupes of All Mail)
+- All Mail + Inbox → 21 unique (2 dupes removed)
+- All Mail + Work Projects → 21 unique (10 dupes removed)
+- Inbox + Work Projects → 12 unique (no overlap between them)
+- All three → 21 unique (12 dupes removed)
+
 **Testing Coverage**:
 - User selects `takeout_fixture` folder (Step 1)
-- Application discovers 6 .mbox files (Step 2 shows all)
+- Application discovers 8 .mbox files (Step 2 shows all)
 - User can select/deselect any files (partial conversion test)
+- **Deduplication**: Multiple scenarios test Message-ID deduplication
 - Tests multi-file handling with same emails grouped differently
 - Tests both custom labels (`Project Notes`) and system labels (`[Gmail]/Important`)
 - Tests empty mbox files (`Spam.mbox`)
