@@ -9,7 +9,7 @@ bleach>=5.0.0           # HTML sanitization
 
 # Testing
 pytest==7.4.3
-pytest-cov==4.1.0
+pytest-cov==7.0.0
 
 # Development
 black==23.12.0
