@@ -1,123 +1,118 @@
 # mbox-to-pdf
 
-Convert Gmail Takeout mbox email files to professionally formatted PDF documents. Suitable for archival, legal, and forensic use.
+**Convert your Gmail emails to PDF files for safekeeping, legal records, or printing.**
 
-## Features
+A simple desktop application that takes your Gmail Takeout export and converts it to professional PDF documents. No technical knowledge required.
 
-- **Forensic document completeness**: Complete email headers (Message-ID, In-Reply-To, References) for legal/financial/forensic use
-- **Professional formatting**: Email threads rendered with clear attribution; emails start on new pages for filing
-- **User-friendly GUI**: No command line required—just select folders and click
-- **Multi-folder support**: Select which mbox files from your Takeout export to convert
-- **Flexible grouping**: Organize PDFs by calendar month, quarter, or year
-- **Rich attachment handling**: Text, CSV, Excel, Word, HTML, PDFs, and images all rendered inline with clear labeling
-- **Privacy-first**: All processing happens locally on your machine
-- **Error handling**: Clear error messages with copyable logs for troubleshooting
-- **Cross-platform**: Available for Windows, macOS, and Linux
+## What It Does
 
-## Project Structure
+- Converts Gmail Takeout exports (`.mbox` files) to PDF documents
+- Groups emails by month, quarter, or year into separate PDF files
+- Preserves all email details: sender, recipients, dates, subject, and attachments
+- Handles attachments: text files, images, spreadsheets, and documents are included in the PDFs
+- Works completely offline — your emails never leave your computer
 
-```
-mbox-to-pdf/
-├── src/                    # Source code
-│   ├── mbox_converter.py  # Core conversion logic
-│   ├── gui.py             # Tkinter GUI
-│   └── utils.py           # Utility functions
-├── tests/                  # Test suite
-├── sample_data/            # Sample mbox files for testing
-├── build/                  # Build artifacts (CI/CD output)
-└── requirements.txt        # Python dependencies
-```
+## Download
 
-## Getting Started
+Download the latest version for your operating system:
 
-### Development Setup
+| Operating System | Download |
+|-----------------|----------|
+| Windows | [mbox-to-pdf-windows.exe](https://github.com/YOUR_USERNAME/mbox-to-pdf/releases/latest) |
+| macOS | [mbox-to-pdf-macos](https://github.com/YOUR_USERNAME/mbox-to-pdf/releases/latest) |
+| Linux | [mbox-to-pdf-linux](https://github.com/YOUR_USERNAME/mbox-to-pdf/releases/latest) |
 
-1. Clone the repo:
+## How to Use
+
+### Step 1: Export Your Gmail
+
+1. Go to [Google Takeout](https://takeout.google.com)
+2. Click "Deselect all" at the top
+3. Scroll down and check only "Mail"
+4. Click "Next step" and then "Create export"
+5. Wait for Google to email you when it's ready (can take hours or days)
+6. Download and unzip the export file
+
+### Step 2: Run mbox-to-pdf
+
+1. Open the mbox-to-pdf application
+2. **Select Folder**: Browse to your unzipped Takeout folder
+3. **Select Files**: Check which email folders you want to convert
+4. **Choose Grouping**: Pick how to organize your PDFs (by month, quarter, or year)
+5. **Choose Output**: Pick where to save your PDF files
+6. **Convert**: Click Convert and wait for it to finish
+
+### Step 3: View Your PDFs
+
+Your emails are now saved as PDF files in the folder you chose. Each PDF contains all emails from that time period, with attachments included.
+
+## Privacy & Security
+
+- **100% offline**: Your emails are never uploaded anywhere
+- **Open source**: You can inspect exactly what the code does
+- **No tracking**: No analytics, no telemetry, no data collection
+
+## Common Questions
+
+**Q: How long does conversion take?**
+A few seconds to a few minutes, depending on how many emails you have.
+
+**Q: What happens to attachments I can't open, like ZIP files?**
+They're listed in the PDF with their filename and size, but the contents aren't shown.
+
+**Q: Can I convert just some emails?**
+Yes! In Step 2, you can uncheck any folders you don't want to include.
+
+**Q: The app won't open on my Mac. What do I do?**
+Right-click the app and choose "Open" to bypass the security warning for unsigned apps.
+
+## Suitable For
+
+- Legal document discovery
+- Financial records retention
+- Email archiving for compliance
+- Personal email backup
+- Estate planning documentation
+
+---
+
+## For Developers
+
+### Setup
+
 ```bash
-git clone <repo-url>
+# Clone and set up
+git clone https://github.com/YOUR_USERNAME/mbox-to-pdf.git
 cd mbox-to-pdf
-```
-
-2. Create and activate virtual environment:
-```bash
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-4. Run tests:
-```bash
+# Run tests
 PYTHONPATH=. pytest tests/
-```
 
-5. Run the application locally:
-```bash
+# Run the app
 PYTHONPATH=. python src/gui.py
 ```
 
-### Building Standalone Executables
+### Build Executable
 
-Standalone executables are built via GitHub Actions CI/CD pipeline. They're available for:
-- Windows (`.exe`)
-- macOS (`.dmg`)
-- Linux (AppImage)
+```bash
+pyinstaller --onefile --windowed --name "mbox-to-pdf" src/gui.py
+# Output: dist/mbox-to-pdf
+```
 
-See `.github/workflows/build.yml` for build configuration.
+### Project Structure
 
-## Usage
-
-1. Download your Gmail data from [Google Takeout](https://takeout.google.com)
-2. Select "Mail (Gmail)" and request the export
-3. Download and extract the exported zip file
-4. Run the mbox-to-pdf application
-5. Select the extracted Takeout folder
-6. Choose which mbox files to convert
-7. Select grouping preference (month, quarter, or year)
-8. Choose output folder
-9. Click "Convert"
-
-## Document Completeness (Legal/Financial/Forensic Use)
-
-The PDFs generated by mbox-to-pdf are complete, professional documents suitable for legal discovery, financial audits, and forensic analysis:
-
-- **Complete email headers**: All metadata preserved (Date, From, To, Cc, Subject, Message-ID, In-Reply-To, References)
-- **Unique message identifiers**: Message-ID visible in every email for reference and chain-of-custody
-- **Thread context**: Email conversations rendered chronologically with clear attribution
-- **Attachment documentation**: All attachments listed with file type and size; supported types rendered inline
-- **Page breaks**: Each email begins on a new page for easy separation and filing
-- **Professional formatting**: Monospace headers, clear sections, standardized dates
-
-**Suitable for**:
-- Legal document discovery
-- Financial records retention
-- Email archives and compliance
-- Forensic analysis and investigation
-- Historical email preservation
-
-## Development Roadmap
-
-- [ ] Core mbox parsing + PDF generation
-- [ ] Tkinter GUI with wizard-style flow
-- [ ] Unit tests
-- [ ] Error handling and logging
-- [ ] GitHub Actions CI/CD build pipeline
-- [ ] Windows installer support
-
-## Security & Privacy
-
-- **100% local processing**: No data sent to external servers
-- **Standard libraries**: Uses only well-audited Python libraries (stdlib + xhtml2pdf)
-- **Open source**: Full transparency—audit the code yourself
-- **No tracking**: No analytics, telemetry, or data collection
+```
+src/
+├── mbox_converter.py  # Core conversion logic
+├── gui.py             # Tkinter GUI
+└── error_handling.py  # Error classification
+tests/                 # Test suite (111 tests)
+sample_data/           # Test fixtures
+```
 
 ## License
 
-TBD
-
-## Contributing
-
-TBD
+MIT License - see [LICENSE](LICENSE) for details.
