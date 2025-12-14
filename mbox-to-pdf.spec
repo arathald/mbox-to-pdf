@@ -1,39 +1,33 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
+# Collect all submodules for packages with dynamic imports
+hiddenimports = [
+    # Standard library
+    'html',
+    'html.parser',
+    'tkinter',
+    'email',
+    'mailbox',
+    'csv',
+    'io',
+    'tempfile',
+    'threading',
+    'pathlib',
+    'datetime',
+    'base64',
+]
+
+# Add all submodules from third-party packages
+for package in ['xhtml2pdf', 'reportlab', 'pypdf', 'PIL', 'bleach', 'docx', 'openpyxl']:
+    hiddenimports.extend(collect_submodules(package))
+
 a = Analysis(
     ['src/gui.py'],
     pathex=[],
     binaries=[],
     datas=[('src', 'src')],
-    hiddenimports=[
-        # Standard library
-        'html',
-        'html.parser',
-        'tkinter',
-        'email',
-        'mailbox',
-        'csv',
-        'io',
-        'tempfile',
-        'threading',
-        'pathlib',
-        'datetime',
-        'base64',
-        # Third-party packages (core)
-        'xhtml2pdf',
-        'xhtml2pdf.pisa',
-        'reportlab',
-        'reportlab.pdfgen',
-        'reportlab.lib',
-        'reportlab.lib.pagesizes',
-        'pypdf',
-        'PIL',
-        'PIL.Image',
-        'bleach',
-        'docx',
-        'openpyxl',
-    ],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
