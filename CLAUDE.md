@@ -145,7 +145,7 @@ Core API and GUI complete (116 tests passing):
 - [x] Continuation headers for multi-page emails (`add_continuation_headers`, `merge_pdfs`)
 - [x] GUI implementation (5-step wizard in `gui.py`)
 - [x] Error handling system (`error_handling.py` with AttachmentError, classify_attachment_error)
-- [ ] CI/CD build pipeline
+- [x] CI/CD build pipeline (GitHub Actions for Windows/macOS/Linux)
 
 ## Important Design Decisions
 
