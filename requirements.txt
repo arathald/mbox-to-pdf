@@ -17,4 +17,4 @@ flake8==6.1.0
 mypy==1.7.1
 
 # For building standalone executables
-pyinstaller==6.3.0
+pyinstaller>=6.17.0      # Supports namespace packages (jaraco/setuptools)

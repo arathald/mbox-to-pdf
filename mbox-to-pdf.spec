@@ -16,10 +16,7 @@ hiddenimports = [
     'pathlib',
     'datetime',
     'base64',
-    # Namespace packages and setuptools dependencies
-    'jaraco',
-    'pkg_resources',
-    'setuptools',
+    # PyInstaller 6.17.0+ handles setuptools/jaraco automatically via built-in hooks
 ]
 
 # Add all submodules from third-party packages
