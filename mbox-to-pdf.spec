@@ -16,6 +16,10 @@ hiddenimports = [
     'pathlib',
     'datetime',
     'base64',
+    # Namespace packages and setuptools dependencies
+    'jaraco',
+    'pkg_resources',
+    'setuptools',
 ]
 
 # Add all submodules from third-party packages
