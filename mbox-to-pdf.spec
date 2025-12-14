@@ -7,6 +7,7 @@ a = Analysis(
     binaries=[],
     datas=[('src', 'src')],
     hiddenimports=[
+        # Standard library
         'html',
         'html.parser',
         'tkinter',
@@ -19,6 +20,19 @@ a = Analysis(
         'pathlib',
         'datetime',
         'base64',
+        # Third-party packages (core)
+        'xhtml2pdf',
+        'xhtml2pdf.pisa',
+        'reportlab',
+        'reportlab.pdfgen',
+        'reportlab.lib',
+        'reportlab.lib.pagesizes',
+        'pypdf',
+        'PIL',
+        'PIL.Image',
+        'bleach',
+        'docx',
+        'openpyxl',
     ],
     hookspath=[],
     hooksconfig={},
