@@ -30,6 +30,8 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
+# Exception: mbox-to-pdf.spec is committed for distribution builds
+!mbox-to-pdf.spec
 
 # Installer logs
 pip-log.txt
