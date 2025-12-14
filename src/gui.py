@@ -5,6 +5,7 @@ Main GUI application - 5-step wizard interface.
 All business logic is in mbox_converter.py; this is presentation only.
 """
 
+import logging
 import os
 import subprocess
 import sys
@@ -19,6 +20,21 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.mbox_converter import convert_mbox_to_pdfs, parse_mbox, ConversionResult
+
+# Set up logging
+LOG_DIR = Path.home() / ".mbox-to-pdf" / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "mbox-to-pdf.log"
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stderr),
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class MboxToPdfApp:
@@ -461,6 +477,9 @@ class MboxToPdfApp:
         try:
             # Get selected files
             selected_files = [p for p, v in self.mbox_files.items() if v.get()]
+            logger.info(f"Starting conversion: {len(selected_files)} files selected")
+            logger.info(f"Output directory: {self.output_folder}")
+            logger.info(f"Grouping strategy: {self.grouping_strategy.get()}")
 
             # Run conversion
             result = convert_mbox_to_pdfs(
@@ -472,10 +491,16 @@ class MboxToPdfApp:
 
             self.conversion_result = result
 
+            logger.info(f"Conversion complete: {result.pdfs_created} PDFs created, {result.emails_processed} emails processed")
+            if result.errors:
+                for error in result.errors:
+                    logger.error(error)
+
             # Show completion on main thread
             self.root.after(0, lambda: self.show_completion(result))
 
         except Exception as e:
+            logger.exception(f"Conversion failed with exception: {e}")
             self.root.after(0, lambda: self.show_error(str(e)))
 
     def show_completion(self, result: ConversionResult):
@@ -572,6 +597,14 @@ class MboxToPdfApp:
         button_frame = ttk.Frame(self.main_frame)
         button_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(20, 0))
 
+        # Left side buttons
+        view_logs_btn = ttk.Button(
+            button_frame,
+            text="View Logs",
+            command=self.open_logs_folder
+        )
+        view_logs_btn.pack(side=tk.LEFT, padx=(0, 10))
+
         if result.success and self.output_folder:
             open_btn = ttk.Button(
                 button_frame,
@@ -580,6 +613,7 @@ class MboxToPdfApp:
             )
             open_btn.pack(side=tk.LEFT)
 
+        # Right side buttons
         close_btn = ttk.Button(
             button_frame,
             text="Close",
@@ -607,6 +641,10 @@ class MboxToPdfApp:
             subprocess.run(["explorer", str(folder)])
         else:
             subprocess.run(["xdg-open", str(folder)])
+
+    def open_logs_folder(self):
+        """Open the logs folder in system file manager."""
+        self.open_folder(LOG_DIR)
 
     def reset_wizard(self):
         """Reset wizard to start a new conversion."""
