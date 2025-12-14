@@ -345,3 +345,174 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
 --===============5363133788318081347==--
 
+From iris@example.com Thu Jan 18 2008 03:30:00 -0500
+Date: Thu, 18 Jan 2008 03:30:00 -0500
+From: iris@example.com
+To: alice@example.com
+Subject: Comprehensive Technical Report - Very Long Document
+Message-ID: <009@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+EXECUTIVE SUMMARY
+
+This is a comprehensive technical report spanning multiple pages to test continuation headers in multi-page PDF conversions. The content is deliberately lengthy to ensure it spans more than one page when rendered in PDF format.
+
+SECTION 1: INTRODUCTION
+
+The purpose of this document is to provide a detailed technical analysis of our system architecture and implementation approach. This document serves multiple purposes:
+
+1. Documentation of current system state
+2. Analysis of technical decisions made
+3. Recommendations for future improvements
+4. Reference material for development team
+
+Our system consists of multiple interconnected components that work together to provide robust email conversion functionality. Each component has been carefully designed to ensure reliability, maintainability, and performance.
+
+SECTION 2: SYSTEM ARCHITECTURE
+
+The system architecture follows a modular design pattern where each component has well-defined responsibilities. This separation of concerns allows us to:
+
+- Test components independently
+- Replace or upgrade components without affecting others
+- Understand the codebase quickly through clear interfaces
+- Scale components independently as needed
+
+The core components include:
+
+1. Email Parser: Responsible for reading and parsing MBOX files
+   - Handles various email formats and encodings
+   - Extracts metadata from email headers
+   - Manages attachment extraction and processing
+   - Supports both simple and multipart MIME messages
+
+2. Attachment Processor: Handles conversion of attachments
+   - Supports multiple file formats (text, CSV, images, Word, Excel, etc.)
+   - Provides graceful fallback for unsupported formats
+   - Maintains security through content sanitization
+   - Preserves formatting and structure where possible
+
+3. PDF Generator: Converts HTML to PDF
+   - Uses xhtml2pdf for pure Python compatibility
+   - Applies consistent styling and formatting
+   - Handles page breaks and continuation headers
+   - Supports multi-page document generation
+
+4. GUI Framework: Provides user interface
+   - Simple wizard-based workflow
+   - Progress reporting and status updates
+   - Error handling and user feedback
+   - Cross-platform compatibility via Tkinter
+
+SECTION 3: TECHNICAL DECISIONS
+
+This section details the major technical decisions made during development and the rationale behind each.
+
+Decision 1: Choice of PDF Library
+We selected xhtml2pdf over alternatives like WeasyPrint for the following reasons:
+- Pure Python implementation with no native dependencies
+- Easier to bundle and distribute via PyInstaller
+- Adequate CSS support for email-centric HTML
+- Faster build times and simpler deployment
+
+Decision 2: GUI Framework Selection
+We chose Tkinter as the GUI framework because:
+- Included in Python standard library
+- Cross-platform support (Windows, macOS, Linux)
+- Sufficient for our wizard-based workflow
+- No external dependencies required
+
+Decision 3: Email Parsing Approach
+We use Python's standard mailbox module for email parsing because:
+- Well-tested and reliable
+- Supports MBOX format natively
+- Handles complex MIME structures
+- No external dependencies
+
+SECTION 4: IMPLEMENTATION DETAILS
+
+Implementation of the email parsing system involved several key steps:
+
+Step 1: MBOX File Reading
+The system reads MBOX files line by line, identifying email boundaries and parsing headers and content. Each email is converted into an internal Email dataclass for processing.
+
+Step 2: Header Extraction
+Email headers are extracted and stored in a structured format. This includes standard headers like From, To, Subject, Date, and custom headers like X-Mailer for forensic completeness.
+
+Step 3: Body Processing
+Email bodies are handled differently based on their content type. Plain text bodies are preserved as-is, while HTML bodies are sanitized for security before inclusion in the PDF.
+
+Step 4: Attachment Handling
+Attachments are extracted from MIME parts and processed based on their type. Each attachment type has a specialized handler that converts it to a displayable format in the PDF.
+
+SECTION 5: QUALITY ASSURANCE
+
+Our quality assurance process includes:
+
+1. Unit Testing: Each component is tested independently with comprehensive test cases
+2. Integration Testing: Components are tested together to ensure proper interaction
+3. Manual Testing: User workflows are tested manually to verify usability
+4. Performance Testing: System performance is monitored for bottlenecks
+5. Security Testing: Security vulnerabilities are identified and addressed
+
+The test suite includes 111 test cases covering:
+- Basic MBOX parsing
+- Complex multipart email handling
+- Attachment processing for all supported formats
+- PDF generation and formatting
+- Error handling and recovery
+- Edge cases and boundary conditions
+
+SECTION 6: PERFORMANCE CONSIDERATIONS
+
+Performance optimization has been a key focus throughout development. Key optimizations include:
+
+1. Efficient parsing: Stream-based reading of MBOX files
+2. Lazy evaluation: Attachments are processed only when needed
+3. Memory management: Large files are processed in chunks
+4. Caching: Repeated calculations are cached where applicable
+
+Current performance metrics:
+- Can process files with thousands of emails
+- Handles large attachments efficiently
+- PDF generation completes in reasonable time
+- GUI remains responsive during processing
+
+SECTION 7: FUTURE ENHANCEMENTS
+
+Potential enhancements for future versions include:
+
+1. Support for additional file formats
+2. Advanced filtering and search capabilities
+3. Customizable PDF styling and formatting
+4. Batch processing of multiple MBOX files
+5. Export to additional formats beyond PDF
+6. Enhanced error recovery mechanisms
+7. Performance optimizations for very large files
+
+SECTION 8: CONCLUSION
+
+This technical report has provided a comprehensive overview of the system architecture, technical decisions, and implementation details. The system has been designed with careful attention to reliability, maintainability, and user experience.
+
+Future development will focus on enhancing capabilities while maintaining the core principles that have guided the design: simplicity, reliability, and user-friendliness.
+
+APPENDIX A: CONFIGURATION REFERENCE
+
+The system supports various configuration options for customization:
+- PDF page size and margins
+- Font selection and sizing
+- Email grouping preferences
+- Attachment handling options
+- Output directory selection
+
+APPENDIX B: TROUBLESHOOTING GUIDE
+
+Common issues and their solutions:
+1. File not found errors: Ensure the MBOX file path is correct
+2. Permission errors: Verify read/write permissions on output directory
+3. Memory errors: Consider processing smaller MBOX files
+4. Encoding issues: Verify email encoding matches system encoding
+
+This concludes the comprehensive technical report.
+

@@ -115,9 +115,12 @@ def render_attachment(attachment: Attachment) -> str:
     """Render an attachment as HTML for embedding in PDF.
 
     Dispatches to appropriate renderer based on MIME type:
-    - text/plain → <pre> code block
+    - text/plain → formatted text
     - text/csv → HTML table
     - image/* → base64-encoded <img> tag
+    - text/html → sanitized HTML
+    - application/docx → extracted text
+    - application/xlsx → HTML tables
     - unsupported → reference note with filename and size
 
     All processing is local—no network calls.
@@ -130,21 +133,37 @@ def render_attachment(attachment: Attachment) -> str:
 
     Side effects:
         Sets attachment.rendered_content and attachment.content_type
+        Sets attachment.error if rendering fails
     """
     mime_type = attachment.mime_type.lower()
     filename = attachment.filename
 
-    # Dispatch based on MIME type
-    if mime_type == "text/csv" or filename.lower().endswith(".csv"):
-        html_content = _render_csv(attachment)
-        attachment.content_type = "table"
-    elif mime_type.startswith("text/"):
-        html_content = _render_text(attachment)
-        attachment.content_type = "text"
-    elif mime_type.startswith("image/"):
-        html_content = _render_image(attachment)
-        attachment.content_type = "image"
-    else:
+    try:
+        # Dispatch based on MIME type
+        if mime_type == "text/csv" or filename.lower().endswith(".csv"):
+            html_content = _render_csv(attachment)
+            attachment.content_type = "table"
+        elif mime_type == "text/html" or filename.lower().endswith(".html") or filename.lower().endswith(".htm"):
+            html_content = _render_html(attachment)
+            attachment.content_type = "html"
+        elif mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or filename.lower().endswith(".docx"):
+            html_content = _render_docx(attachment)
+            attachment.content_type = "docx"
+        elif mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" or filename.lower().endswith(".xlsx"):
+            html_content = _render_xlsx(attachment)
+            attachment.content_type = "xlsx"
+        elif mime_type.startswith("text/"):
+            html_content = _render_text(attachment)
+            attachment.content_type = "text"
+        elif mime_type.startswith("image/"):
+            html_content = _render_image(attachment)
+            attachment.content_type = "image"
+        else:
+            html_content = _render_reference(attachment)
+            attachment.content_type = "reference"
+    except Exception as e:
+        # If rendering fails, show reference and record error
+        attachment.error = str(e)
         html_content = _render_reference(attachment)
         attachment.content_type = "reference"
 
@@ -152,8 +171,81 @@ def render_attachment(attachment: Attachment) -> str:
     return html_content
 
 
+def _render_docx(attachment: Attachment) -> str:
+    """Extract text content from Word document."""
+    try:
+        from docx import Document
+        from io import BytesIO
+        doc = Document(BytesIO(attachment.raw_content))
+        text = '\n\n'.join(paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip())
+
+        if not text:
+            return _render_reference(attachment)
+
+        # Render as formatted text with paragraph breaks preserved
+        paragraphs = text.split('\n\n')
+        formatted = ''.join(f'<p>{html.escape(para).replace(chr(10), "<br/>")}</p>' for para in paragraphs if para.strip())
+        return f'<div class="attachment-docx">{formatted}</div>'
+    except Exception:
+        # If extraction fails, show reference
+        return _render_reference(attachment)
+
+
+def _render_xlsx(attachment: Attachment) -> str:
+    """Extract and render Excel spreadsheet as HTML tables."""
+    try:
+        from openpyxl import load_workbook
+        from io import BytesIO
+        wb = load_workbook(BytesIO(attachment.raw_content))
+
+        html_parts = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            html_parts.append(f'<h4 style="margin-top: 1em; margin-bottom: 0.5em;">{html.escape(sheet_name)}</h4>')
+            html_parts.append('<table class="attachment-xlsx">')
+
+            for row in ws.iter_rows():
+                html_parts.append('<tr>')
+                for cell in row:
+                    value = cell.value if cell.value is not None else ''
+                    html_parts.append(f'<td>{html.escape(str(value))}</td>')
+                html_parts.append('</tr>')
+
+            html_parts.append('</table>')
+
+        if not html_parts:
+            return _render_reference(attachment)
+
+        return f'<div class="attachment-xlsx">{" ".join(html_parts)}</div>'
+    except Exception:
+        # If extraction fails, show reference
+        return _render_reference(attachment)
+
+
+def _render_html(attachment: Attachment) -> str:
+    """Render HTML attachment by sanitizing and wrapping it."""
+    try:
+        content = attachment.raw_content.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            content = attachment.raw_content.decode("latin-1")
+        except UnicodeDecodeError:
+            content = attachment.raw_content.decode("utf-8", errors="replace")
+
+    # Sanitize HTML using bleach
+    from bleach import clean
+    sanitized = clean(
+        content,
+        tags=['html', 'body', 'head', 'title', 'style', 'p', 'br', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+              'strong', 'b', 'em', 'i', 'u', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'ol', 'ul', 'li'],
+        attributes={'a': ['href', 'title'], 'img': ['src', 'alt', 'title', 'width', 'height']},
+        strip=True
+    )
+    return f'<div class="attachment-html">{sanitized}</div>'
+
+
 def _render_text(attachment: Attachment) -> str:
-    """Render text attachment as preformatted code block."""
+    """Render text attachment as regular formatted text."""
     try:
         content = attachment.raw_content.decode("utf-8")
     except UnicodeDecodeError:
@@ -163,7 +255,10 @@ def _render_text(attachment: Attachment) -> str:
             content = attachment.raw_content.decode("utf-8", errors="replace")
 
     escaped = html.escape(content)
-    return f'<pre class="attachment-text">{escaped}</pre>'
+    # Preserve paragraph breaks but wrap naturally
+    paragraphs = escaped.split('\n\n')
+    formatted = ''.join(f'<p>{para.replace(chr(10), "<br/>")}</p>' for para in paragraphs if para.strip())
+    return f'<div class="attachment-text">{formatted}</div>'
 
 
 def _render_csv(attachment: Attachment) -> str:
@@ -323,9 +418,11 @@ def _render_email_body(email: Email) -> str:
         # HTML email - include as-is (sanitization happens at parse time)
         parts.append(f'<div class="html-body">{email.body_html}</div>')
     elif email.body_text:
-        # Plain text email - wrap in pre for formatting preservation
+        # Plain text email - render with natural wrapping, preserving paragraph breaks
         escaped = html.escape(email.body_text)
-        parts.append(f'<pre class="plaintext-body">{escaped}</pre>')
+        paragraphs = escaped.split('\n\n')
+        formatted = ''.join(f'<p>{para.replace(chr(10), "<br/>")}</p>' for para in paragraphs if para.strip())
+        parts.append(f'<div class="plaintext-body">{formatted}</div>')
 
     parts.append("</div>")
     return "".join(parts)
@@ -389,18 +486,21 @@ body {
 }
 
 .header-field {
-    display: flex;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
 }
 
 .header-label {
     font-weight: bold;
-    min-width: 100px;
     color: #555;
+    display: block;
+    margin-bottom: 2px;
 }
 
 .header-value {
     color: #222;
+    display: block;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .email-body {
@@ -408,12 +508,13 @@ body {
 }
 
 .plaintext-body {
-    font-family: "Courier New", monospace;
+    font-family: "Times New Roman", serif;
     font-size: 10pt;
-    white-space: pre-wrap;
-    background-color: #fafafa;
-    padding: 10px;
-    border: 1px solid #eee;
+    line-height: 1.6;
+}
+
+.plaintext-body p {
+    margin: 0.5em 0;
 }
 
 .html-body {
@@ -445,14 +546,42 @@ body {
 }
 
 .attachment-text {
-    font-family: "Courier New", monospace;
+    font-family: "Times New Roman", serif;
     font-size: 9pt;
-    white-space: pre-wrap;
-    background-color: #f9f9f9;
+    line-height: 1.5;
+}
+
+.attachment-text p {
+    margin: 0.4em 0;
+}
+
+.attachment-html {
+    font-family: "Times New Roman", serif;
+    font-size: 9pt;
+    line-height: 1.5;
+    border: 1px solid #eee;
     padding: 8px;
-    border: 1px solid #ddd;
-    max-height: 300px;
-    overflow: hidden;
+    background-color: #fafafa;
+}
+
+.attachment-docx {
+    font-family: "Times New Roman", serif;
+    font-size: 9pt;
+    line-height: 1.5;
+}
+
+.attachment-docx p {
+    margin: 0.4em 0;
+}
+
+.attachment-xlsx {
+    font-size: 8pt;
+}
+
+.attachment-xlsx h4 {
+    margin: 1em 0 0.5em 0;
+    font-size: 10pt;
+    font-weight: bold;
 }
 
 .attachment-csv {
@@ -471,6 +600,19 @@ body {
 .attachment-csv th {
     background-color: #f5f5f5;
     font-weight: bold;
+}
+
+.attachment-xlsx table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+    font-size: 8pt;
+}
+
+.attachment-xlsx td {
+    border: 1px solid #ddd;
+    padding: 3px 6px;
+    text-align: left;
 }
 
 .attachment-image {
@@ -957,6 +1099,7 @@ def convert_mbox_to_pdfs(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     errors: List[str] = []
+    attachment_errors: List[AttachmentErrorInfo] = []
     created_files: List[str] = []
 
     # Step 1: Parse and deduplicate emails from all mbox files
@@ -1015,6 +1158,21 @@ def convert_mbox_to_pdfs(
                     # Render email to HTML
                     email_html = render_email_to_html(email)
 
+                    # Collect any attachment errors from this email
+                    for attachment in email.attachments:
+                        if attachment.error:
+                            error_info = AttachmentErrorInfo(
+                                email_subject=email.subject,
+                                email_date=email.date.strftime('%a, %B %d, %Y at %I:%M %p'),
+                                email_from=email.from_addr,
+                                attachment_filename=attachment.filename,
+                                mime_type=attachment.mime_type,
+                                file_size=attachment.format_size_for_display(),
+                                error_type="rendering_failed",
+                                error_message=f"Could not render attachment: {attachment.error}"
+                            )
+                            attachment_errors.append(error_info)
+
                     # Generate initial PDF
                     raw_pdf = temp_path / f"email_{j:04d}_raw.pdf"
                     generate_pdf(email_html, raw_pdf)
@@ -1055,6 +1213,6 @@ def convert_mbox_to_pdfs(
         pdfs_created=len(created_files),
         emails_processed=emails_processed,
         errors=errors,
-        attachment_errors=[],  # Populated during rendering if there are failures
+        attachment_errors=attachment_errors,
         created_files=created_files,
     )

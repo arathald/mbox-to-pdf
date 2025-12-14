@@ -102,9 +102,9 @@ class TestParseMboxComplex:
     """Tests for complex.mbox with attachments."""
 
     def test_parse_complex_mbox_returns_ten_emails(self, complex_fixture):
-        """Parsing complex.mbox should return exactly 10 Email objects."""
+        """Parsing complex.mbox should return exactly 11 Email objects."""
         emails = parse_mbox(complex_fixture)
-        assert len(emails) == 10
+        assert len(emails) == 11
 
     def test_parse_complex_mbox_emails_sorted_by_date(self, complex_fixture):
         """Emails should be sorted by date ascending."""
@@ -316,7 +316,7 @@ class TestDateGrouping:
         groups = group_emails_by_date(emails, "month")
 
         assert "2008-01-January" in groups
-        assert len(groups["2008-01-January"]) == 10
+        assert len(groups["2008-01-January"]) == 11
 
     def test_emails_within_group_sorted_by_date(self, complex_fixture):
         """Emails within each group should be sorted by date ascending."""
@@ -368,16 +368,16 @@ class TestAttachmentRendering:
     """Tests for attachment rendering to HTML."""
 
     def test_render_text_attachment_returns_pre_block(self, complex_fixture):
-        """Text attachment should render as <pre> code block."""
+        """Text attachment should render as formatted text with paragraphs."""
         emails = parse_mbox(complex_fixture)
         email = emails[0]  # First email has notes.txt
         attachment = email.attachments[0]
 
         html = render_attachment(attachment)
 
-        assert '<pre class="attachment-text">' in html
+        assert '<div class="attachment-text">' in html
         assert "Project Notes" in html  # Content from notes.txt
-        assert "</pre>" in html
+        assert "<p>" in html  # Should have paragraph tags
 
     def test_render_text_attachment_preserves_line_breaks(self, complex_fixture):
         """Text attachment should preserve line breaks."""
