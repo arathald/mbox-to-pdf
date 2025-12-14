@@ -243,19 +243,3 @@ def is_unsupported_file_type(mime_type: str, filename: str) -> bool:
             return True
 
     return False
-
-
-# Maximum attachment size (100 MB)
-MAX_ATTACHMENT_SIZE = 100 * 1024 * 1024
-
-
-def check_attachment_size(size_bytes: int) -> bool:
-    """Check if attachment size is within limits.
-
-    Args:
-        size_bytes: Size of attachment in bytes
-
-    Returns:
-        True if size is acceptable, False if too large
-    """
-    return size_bytes <= MAX_ATTACHMENT_SIZE

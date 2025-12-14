@@ -12,8 +12,6 @@ from src.error_handling import (
     classify_attachment_error,
     format_file_size,
     is_unsupported_file_type,
-    check_attachment_size,
-    MAX_ATTACHMENT_SIZE,
 )
 from src.mbox_converter import Email
 
@@ -241,20 +239,3 @@ class TestAttachmentErrorInfo:
         assert info.file_size == "1.5 MB"
 
 
-class TestCheckAttachmentSize:
-    """Tests for check_attachment_size function."""
-
-    def test_small_file_ok(self):
-        assert check_attachment_size(1024) is True
-
-    def test_medium_file_ok(self):
-        assert check_attachment_size(50 * 1024 * 1024) is True  # 50 MB
-
-    def test_at_limit_ok(self):
-        assert check_attachment_size(MAX_ATTACHMENT_SIZE) is True
-
-    def test_over_limit_rejected(self):
-        assert check_attachment_size(MAX_ATTACHMENT_SIZE + 1) is False
-
-    def test_very_large_rejected(self):
-        assert check_attachment_size(500 * 1024 * 1024) is False  # 500 MB
