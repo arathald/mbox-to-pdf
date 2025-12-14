@@ -17,6 +17,8 @@ from src.mbox_converter import (
     render_email_to_html,
     generate_pdf,
     convert_mbox_to_pdfs,
+    add_continuation_headers,
+    merge_pdfs,
     Email,
     Attachment,
     ConversionResult,
@@ -774,3 +776,89 @@ class TestConvertMboxToPdfs:
         )
         assert result.success is True
         assert result.pdfs_created > 0
+
+
+class TestContinuationHeaders:
+    """Tests for continuation headers on multi-page emails."""
+
+    def test_add_continuation_headers_returns_path(self, temp_output_dir):
+        """add_continuation_headers should return the output path."""
+        from pypdf import PdfReader, PdfWriter
+
+        # Create a simple 2-page PDF for testing
+        input_pdf = temp_output_dir / "input.pdf"
+        output_pdf = temp_output_dir / "output.pdf"
+
+        # Generate a test PDF with enough content for 2 pages
+        long_content = "<p>" + ("Lorem ipsum dolor sit amet. " * 200) + "</p>"
+        generate_pdf(long_content, input_pdf)
+
+        # Verify it has multiple pages
+        reader = PdfReader(input_pdf)
+        if len(reader.pages) < 2:
+            pytest.skip("Test PDF did not generate multiple pages")
+
+        result = add_continuation_headers(
+            input_pdf,
+            output_pdf,
+            subject="Test Subject",
+            from_addr="sender@example.com"
+        )
+
+        assert result == output_pdf
+        assert output_pdf.exists()
+
+    def test_add_continuation_headers_preserves_page_count(self, temp_output_dir):
+        """Adding headers should not change the number of pages."""
+        from pypdf import PdfReader
+
+        input_pdf = temp_output_dir / "input.pdf"
+        output_pdf = temp_output_dir / "output.pdf"
+
+        # Generate a test PDF with enough content for 2+ pages
+        long_content = "<p>" + ("Lorem ipsum dolor sit amet. " * 200) + "</p>"
+        generate_pdf(long_content, input_pdf)
+
+        reader = PdfReader(input_pdf)
+        original_page_count = len(reader.pages)
+
+        if original_page_count < 2:
+            pytest.skip("Test PDF did not generate multiple pages")
+
+        add_continuation_headers(
+            input_pdf,
+            output_pdf,
+            subject="Test Subject",
+            from_addr="sender@example.com"
+        )
+
+        reader = PdfReader(output_pdf)
+        assert len(reader.pages) == original_page_count
+
+    def test_single_page_pdf_unchanged(self, simple_fixture, temp_output_dir):
+        """Single-page PDFs should pass through without modification."""
+        from pypdf import PdfReader
+
+        emails = parse_mbox(simple_fixture)
+        html = render_email_to_html(emails[0])
+
+        input_pdf = temp_output_dir / "single_page.pdf"
+        output_pdf = temp_output_dir / "output.pdf"
+
+        generate_pdf(html, input_pdf)
+
+        reader = PdfReader(input_pdf)
+        if len(reader.pages) > 1:
+            pytest.skip("Test PDF has multiple pages, expected single page")
+
+        add_continuation_headers(
+            input_pdf,
+            output_pdf,
+            subject=emails[0].subject,
+            from_addr=emails[0].from_addr
+        )
+
+        # Output should still be a valid PDF
+        assert output_pdf.exists()
+        reader = PdfReader(output_pdf)
+        assert len(reader.pages) == 1

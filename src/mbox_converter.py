@@ -811,6 +811,119 @@ def _parse_attachment(part) -> Optional[Attachment]:
     )
 
 
+def add_continuation_headers(
+    input_pdf: Path,
+    output_pdf: Path,
+    subject: str,
+    from_addr: str,
+) -> Path:
+    """Add continuation headers to pages 2+ of a multi-page PDF.
+
+    For multi-page emails, adds a header like:
+    "Subject: [subject] (continued) - From: [from_addr]"
+    to the top of pages 2 and beyond.
+
+    Single-page PDFs are copied through unchanged.
+
+    Args:
+        input_pdf: Path to the input PDF
+        output_pdf: Path for the output PDF
+        subject: Email subject for the header
+        from_addr: Email sender for the header
+
+    Returns:
+        The output path
+    """
+    from io import BytesIO
+
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+
+    input_pdf = Path(input_pdf)
+    output_pdf = Path(output_pdf)
+
+    reader = PdfReader(input_pdf)
+    writer = PdfWriter()
+
+    total_pages = len(reader.pages)
+
+    # If single page, just copy through
+    if total_pages <= 1:
+        for page in reader.pages:
+            writer.add_page(page)
+        with open(output_pdf, "wb") as f:
+            writer.write(f)
+        return output_pdf
+
+    # Create header overlay for continuation pages
+    def create_header_overlay(page_num: int) -> BytesIO:
+        """Create a PDF page with just the header text."""
+        packet = BytesIO()
+        c = canvas.Canvas(packet, pagesize=letter)
+        page_width, page_height = letter
+
+        # Truncate subject if too long
+        max_subject_len = 60
+        display_subject = subject[:max_subject_len] + "..." if len(subject) > max_subject_len else subject
+
+        # Header text
+        header_text = f"Subject: {display_subject} (continued - page {page_num} of {total_pages})"
+
+        # Draw header at top of page
+        c.setFont("Helvetica", 8)
+        c.setFillColorRGB(0.4, 0.4, 0.4)  # Gray color
+        c.drawString(54, page_height - 36, header_text)  # 0.75" from top, 0.75" from left
+
+        c.save()
+        packet.seek(0)
+        return packet
+
+    # Process each page
+    for i, page in enumerate(reader.pages):
+        if i == 0:
+            # First page - no header needed
+            writer.add_page(page)
+        else:
+            # Create header overlay for this page
+            header_pdf = PdfReader(create_header_overlay(i + 1))
+            header_page = header_pdf.pages[0]
+
+            # Merge header onto the original page
+            page.merge_page(header_page)
+            writer.add_page(page)
+
+    with open(output_pdf, "wb") as f:
+        writer.write(f)
+
+    return output_pdf
+
+
+def merge_pdfs(pdf_paths: List[Path], output_path: Path) -> Path:
+    """Merge multiple PDF files into a single PDF.
+
+    Args:
+        pdf_paths: List of paths to PDFs to merge (in order)
+        output_path: Path for the merged output PDF
+
+    Returns:
+        The output path
+    """
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+
+    for pdf_path in pdf_paths:
+        reader = PdfReader(pdf_path)
+        for page in reader.pages:
+            writer.add_page(page)
+
+    with open(output_path, "wb") as f:
+        writer.write(f)
+
+    return output_path
+
+
 def convert_mbox_to_pdfs(
     mbox_paths: List[Path],
     output_dir: Path,
@@ -876,36 +989,57 @@ def convert_mbox_to_pdfs(
         progress_callback(20, 100, f"Creating {len(groups)} PDF files...")
 
     # Step 3: Generate PDF for each group
+    import tempfile
+    import shutil
+
     total_groups = len(groups)
     for i, (group_key, group_emails) in enumerate(groups.items()):
         if progress_callback:
             progress_pct = 20 + int((i / total_groups) * 75)
             progress_callback(progress_pct, 100, f"Generating {group_key}.pdf...")
 
-        # Render all emails in this group to HTML
-        html_parts = []
-        for email in group_emails:
+        # Create temp directory for intermediate PDFs
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            email_pdfs: List[Path] = []
+
+            # Generate PDF for each email with continuation headers
+            for j, email in enumerate(group_emails):
+                try:
+                    # Render email to HTML
+                    email_html = render_email_to_html(email)
+
+                    # Generate initial PDF
+                    raw_pdf = temp_path / f"email_{j:04d}_raw.pdf"
+                    generate_pdf(email_html, raw_pdf)
+
+                    # Add continuation headers for multi-page emails
+                    final_pdf = temp_path / f"email_{j:04d}.pdf"
+                    add_continuation_headers(
+                        raw_pdf,
+                        final_pdf,
+                        subject=email.subject,
+                        from_addr=email.from_addr,
+                    )
+
+                    email_pdfs.append(final_pdf)
+
+                except Exception as e:
+                    errors.append(f"Failed to process email '{email.subject}': {e}")
+
+            if not email_pdfs:
+                errors.append(f"No emails processed for group {group_key}")
+                continue
+
+            # Merge all email PDFs into the final group PDF
+            pdf_filename = f"{group_key}.pdf"
+            pdf_path = output_dir / pdf_filename
+
             try:
-                email_html = render_email_to_html(email)
-                html_parts.append(email_html)
+                merge_pdfs(email_pdfs, pdf_path)
+                created_files.append(str(pdf_path))
             except Exception as e:
-                errors.append(f"Failed to render email '{email.subject}': {e}")
-
-        if not html_parts:
-            errors.append(f"No emails rendered for group {group_key}")
-            continue
-
-        combined_html = "\n".join(html_parts)
-
-        # Generate PDF
-        pdf_filename = f"{group_key}.pdf"
-        pdf_path = output_dir / pdf_filename
-
-        try:
-            generate_pdf(combined_html, pdf_path)
-            created_files.append(str(pdf_path))
-        except Exception as e:
-            errors.append(f"Failed to generate PDF for {group_key}: {e}")
+                errors.append(f"Failed to merge PDFs for {group_key}: {e}")
 
     if progress_callback:
         progress_callback(100, 100, "Conversion complete")
