@@ -132,7 +132,7 @@ Generated PDFs preserve complete email metadata:
 
 ## Implementation Status
 
-Core API and GUI complete (81 tests passing):
+Core API and GUI complete (116 tests passing):
 - [x] Project scaffolding and structure
 - [x] Comprehensive design specification (DESIGN.md)
 - [x] Test fixtures (simple.mbox, complex.mbox, takeout_fixture)
@@ -144,7 +144,7 @@ Core API and GUI complete (81 tests passing):
 - [x] High-level orchestration (`convert_mbox_to_pdfs` with progress callback)
 - [x] Continuation headers for multi-page emails (`add_continuation_headers`, `merge_pdfs`)
 - [x] GUI implementation (5-step wizard in `gui.py`)
-- [ ] Error handling system (structured AttachmentError dialogs)
+- [x] Error handling system (`error_handling.py` with AttachmentError, classify_attachment_error)
 - [ ] CI/CD build pipeline
 
 ## Important Design Decisions

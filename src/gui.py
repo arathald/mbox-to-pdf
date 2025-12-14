@@ -527,7 +527,30 @@ class MboxToPdfApp:
                 "There were errors during conversion"
             )
 
-        # Show errors if any
+        # Show attachment errors if any (with detailed info)
+        if result.attachment_errors:
+            att_frame = ttk.Frame(self.main_frame)
+            att_frame.pack(fill=tk.X, pady=10)
+
+            ttk.Label(
+                att_frame,
+                text=f"Attachment Warnings ({len(result.attachment_errors)}):",
+                font=("TkDefaultFont", 10, "bold"),
+                foreground="orange"
+            ).pack(anchor=tk.W)
+
+            for err_info in result.attachment_errors[:5]:  # Show first 5
+                err_text = f"  {err_info.attachment_filename}: {err_info.error_message}"
+                ttk.Label(att_frame, text=err_text, foreground="gray").pack(anchor=tk.W)
+
+            if len(result.attachment_errors) > 5:
+                ttk.Label(
+                    att_frame,
+                    text=f"  ... and {len(result.attachment_errors) - 5} more",
+                    foreground="gray"
+                ).pack(anchor=tk.W)
+
+        # Show general errors if any
         if result.errors:
             errors_frame = ttk.Frame(self.main_frame)
             errors_frame.pack(fill=tk.BOTH, expand=True, pady=10)

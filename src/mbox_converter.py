@@ -95,14 +95,20 @@ class ConversionResult:
         success: True if conversion completed without fatal errors
         pdfs_created: Number of PDF files successfully created
         emails_processed: Total number of emails processed
-        errors: List of human-readable error messages
+        errors: List of human-readable error messages (for logs)
+        attachment_errors: List of AttachmentErrorInfo for dialog display
         created_files: List of paths to generated PDF files
     """
     success: bool
     pdfs_created: int
     emails_processed: int = 0
     errors: List[str] = field(default_factory=list)
+    attachment_errors: List["AttachmentErrorInfo"] = field(default_factory=list)
     created_files: List[str] = field(default_factory=list)
+
+
+# Import here to avoid circular imports
+from src.error_handling import AttachmentErrorInfo
 
 
 def render_attachment(attachment: Attachment) -> str:
@@ -1049,5 +1055,6 @@ def convert_mbox_to_pdfs(
         pdfs_created=len(created_files),
         emails_processed=emails_processed,
         errors=errors,
+        attachment_errors=[],  # Populated during rendering if there are failures
         created_files=created_files,
     )
