@@ -63,15 +63,22 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Build with PyInstaller (Unix)
-      if: runner.os != 'Windows'
+    - name: Install tkinter (Linux)
+      if: runner.os == 'Linux'
       run: |
-        pyinstaller --onefile --windowed --name "mbox-to-pdf" --add-data "src:src" src/gui.py
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev
 
-    - name: Build with PyInstaller (Windows)
-      if: runner.os == 'Windows'
+    - name: Install tkinter (macOS)
+      if: runner.os == 'macOS'
       run: |
-        pyinstaller --onefile --windowed --name "mbox-to-pdf" --add-data "src;src" src/gui.py
+        brew install python-tk@3.12
+
+    - name: Verify tkinter
+      run: python -c "import tkinter; print('tkinter OK')"
+
+    - name: Build with PyInstaller
+      run: pyinstaller mbox-to-pdf.spec
 
     - name: Prepare artifact (Unix)
       if: runner.os != 'Windows'
