@@ -315,7 +315,47 @@ def _render_reference(attachment: Attachment) -> str:
     )
 
 
-def render_email_to_html(email: Email) -> str:
+def extract_attachments_to_disk(email: Email, attachment_dir: Path) -> Dict[str, str]:
+    """Extract attachments to disk and return mapping of filename to relative path.
+
+    Args:
+        email: Email with attachments
+        attachment_dir: Directory to save attachments to
+
+    Returns:
+        Dict mapping original filename to relative path from PDF location
+    """
+    attachment_dir = Path(attachment_dir)
+    attachment_dir.mkdir(parents=True, exist_ok=True)
+
+    attachment_paths = {}
+
+    for attachment in email.attachments:
+        # Create safe filename (avoid path traversal)
+        safe_name = attachment.filename.replace('/', '_').replace('\\', '_')
+
+        # Handle duplicates by adding a number
+        target_path = attachment_dir / safe_name
+        counter = 1
+        base_name, ext = safe_name.rsplit('.', 1) if '.' in safe_name else (safe_name, '')
+        while target_path.exists():
+            if ext:
+                safe_name = f"{base_name}_{counter}.{ext}"
+            else:
+                safe_name = f"{base_name}_{counter}"
+            target_path = attachment_dir / safe_name
+            counter += 1
+
+        # Write attachment to disk
+        target_path.write_bytes(attachment.raw_content)
+
+        # Store relative path (from the PDF location, attachments folder is at same level)
+        attachment_paths[attachment.filename] = f"attachments/{safe_name}"
+
+    return attachment_paths
+
+
+def render_email_to_html(email: Email, attachment_paths: Optional[Dict[str, str]] = None) -> str:
     """Render a complete email as HTML for PDF generation.
 
     Produces professional formatting suitable for legal/forensic documentation:
@@ -339,9 +379,9 @@ def render_email_to_html(email: Email) -> str:
     # Body section
     parts.append(_render_email_body(email))
 
-    # Attachments section (if any)
+    # Attachments section (if any) - with hyperlinks if paths provided
     if email.attachments:
-        parts.append(_render_attachments_section(email.attachments))
+        parts.append(_render_attachments_section(email.attachments, attachment_paths))
 
     parts.append("</div>")
     return "".join(parts)
@@ -409,23 +449,39 @@ def _render_email_body(email: Email) -> str:
     return "".join(parts)
 
 
-def _render_attachments_section(attachments: List[Attachment]) -> str:
-    """Render attachments section with all attachment content."""
+def _render_attachments_section(attachments: List[Attachment], attachment_paths: Optional[Dict[str, str]] = None) -> str:
+    """Render attachments section - either as links or embedded content.
+
+    If attachment_paths is provided, renders as hyperlinks to external files.
+    Otherwise, embeds content inline (for backward compatibility).
+    """
     parts = ['<div class="attachments-section">']
     parts.append('<h3 class="attachments-header">Attachments</h3>')
 
     for attachment in attachments:
         parts.append('<div class="attachment-item">')
-        parts.append(
-            f'<div class="attachment-name">'
-            f'{html.escape(attachment.filename)} '
-            f'<small>({attachment.format_size_for_display()})</small>'
-            f'</div>'
-        )
 
-        # Render the attachment content
-        rendered = render_attachment(attachment)
-        parts.append(f'<div class="attachment-content">{rendered}</div>')
+        if attachment_paths and attachment.filename in attachment_paths:
+            # Render as hyperlink
+            rel_path = attachment_paths[attachment.filename]
+            parts.append(
+                f'<a href="{html.escape(rel_path)}" class="attachment-link">'
+                f'{html.escape(attachment.filename)}'
+                f'</a>'
+            )
+            parts.append(
+                f'<small class="attachment-size"> ({attachment.format_size_for_display()})</small>'
+            )
+        else:
+            # Render content inline (backward compatibility)
+            parts.append(
+                f'<div class="attachment-name">'
+                f'{html.escape(attachment.filename)} '
+                f'<small>({attachment.format_size_for_display()})</small>'
+                f'</div>'
+            )
+            rendered = render_attachment(attachment)
+            parts.append(f'<div class="attachment-content">{rendered}</div>')
 
         parts.append("</div>")
 
@@ -589,6 +645,17 @@ body {
     border: 1px solid #ffc107;
     padding: 10px;
     border-radius: 3px;
+}
+
+.attachment-link {
+    color: #0066cc;
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.attachment-size {
+    color: #666;
+    font-style: italic;
 }
 </style>
 """
@@ -1152,6 +1219,12 @@ def convert_mbox_to_pdfs(
             progress_pct = 20 + int((i / total_groups) * 75)
             progress_callback(progress_pct, 100, f"Generating {group_key}.pdf...")
 
+        # Create group directory structure
+        group_dir = output_dir / group_key
+        attachments_dir = group_dir / "attachments"
+        group_dir.mkdir(parents=True, exist_ok=True)
+        attachments_dir.mkdir(parents=True, exist_ok=True)
+
         # Create temp directory for intermediate PDFs
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -1160,13 +1233,16 @@ def convert_mbox_to_pdfs(
             # Generate PDF for each email with continuation headers
             for j, email in enumerate(group_emails):
                 try:
-                    # Render email to HTML
-                    email_html = render_email_to_html(email)
+                    # Extract attachments for this email
+                    attachment_paths = extract_attachments_to_disk(email, attachments_dir)
+
+                    # Render email to HTML with attachment paths
+                    email_html = render_email_to_html(email, attachment_paths)
 
                     # Collect any attachment warnings from this email
                     for attachment in email.attachments:
-                        # Track rendering errors
-                        if attachment.error:
+                        # Track attachments that were saved to disk
+                        if attachment.filename in attachment_paths:
                             error_info = AttachmentErrorInfo(
                                 email_subject=email.subject,
                                 email_date=email.date.strftime('%a, %B %d, %Y at %I:%M %p'),
@@ -1174,21 +1250,8 @@ def convert_mbox_to_pdfs(
                                 attachment_filename=attachment.filename,
                                 mime_type=attachment.mime_type,
                                 file_size=attachment.format_size_for_display(),
-                                error_type="rendering_failed",
-                                error_message=f"Could not render attachment: {attachment.error}"
-                            )
-                            attachment_errors.append(error_info)
-                        # Track attachments rendered as reference notes (unsupported types)
-                        elif attachment.content_type == "reference":
-                            error_info = AttachmentErrorInfo(
-                                email_subject=email.subject,
-                                email_date=email.date.strftime('%a, %B %d, %Y at %I:%M %p'),
-                                email_from=email.from_addr,
-                                attachment_filename=attachment.filename,
-                                mime_type=attachment.mime_type,
-                                file_size=attachment.format_size_for_display(),
-                                error_type="unsupported_type",
-                                error_message="This file type cannot be rendered in the PDF."
+                                error_type="saved_to_disk",
+                                error_message="Attachment saved to attachments folder."
                             )
                             attachment_errors.append(error_info)
 
@@ -1217,11 +1280,11 @@ def convert_mbox_to_pdfs(
 
             # Merge all email PDFs into the final group PDF
             pdf_filename = f"{group_key}.pdf"
-            pdf_path = output_dir / pdf_filename
+            pdf_path = group_dir / pdf_filename
 
             try:
                 merge_pdfs(email_pdfs, pdf_path)
-                created_files.append(str(pdf_path))
+                created_files.append(str(group_dir))  # Track the group directory, not just the PDF
             except Exception as e:
                 errors.append(f"Failed to merge PDFs for {group_key}: {e}")
 

@@ -675,14 +675,15 @@ class TestConvertMboxToPdfs:
         assert isinstance(result, ConversionResult)
 
     def test_convert_creates_pdf_files(self, simple_fixture, temp_output_dir):
-        """convert_mbox_to_pdfs should create PDF files in output directory."""
+        """convert_mbox_to_pdfs should create PDF files in group subdirectories."""
         result = convert_mbox_to_pdfs(
             mbox_paths=[simple_fixture],
             output_dir=temp_output_dir,
             grouping_strategy="month"
         )
         assert result.pdfs_created > 0
-        assert len(list(temp_output_dir.glob("*.pdf"))) > 0
+        # PDFs are now in subdirectories: output_dir/<group>/<group>.pdf
+        assert len(list(temp_output_dir.glob("*/*.pdf"))) > 0
 
     def test_convert_result_includes_created_files(self, simple_fixture, temp_output_dir):
         """ConversionResult should list all created PDF paths."""
