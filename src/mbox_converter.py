@@ -316,17 +316,23 @@ def _render_reference(attachment: Attachment) -> str:
 
 
 def extract_attachments_to_disk(email: Email, attachment_dir: Path) -> Dict[str, str]:
-    """Extract attachments to disk and return mapping of filename to relative path.
+    """Extract attachments to disk organized by email date.
+
+    Creates subdirectories by date (YYYY-MM-DD) under attachments folder.
 
     Args:
         email: Email with attachments
-        attachment_dir: Directory to save attachments to
+        attachment_dir: Base attachments directory
 
     Returns:
-        Dict mapping original filename to relative path from PDF location
+        Dict mapping original filename to relative path (e.g., "attachments/2008-01-15/file.pdf")
     """
     attachment_dir = Path(attachment_dir)
-    attachment_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create date-based subdirectory (YYYY-MM-DD)
+    date_str = email.date.strftime("%Y-%m-%d")
+    date_dir = attachment_dir / date_str
+    date_dir.mkdir(parents=True, exist_ok=True)
 
     attachment_paths = {}
 
@@ -335,7 +341,7 @@ def extract_attachments_to_disk(email: Email, attachment_dir: Path) -> Dict[str,
         safe_name = attachment.filename.replace('/', '_').replace('\\', '_')
 
         # Handle duplicates by adding a number
-        target_path = attachment_dir / safe_name
+        target_path = date_dir / safe_name
         counter = 1
         base_name, ext = safe_name.rsplit('.', 1) if '.' in safe_name else (safe_name, '')
         while target_path.exists():
@@ -343,14 +349,15 @@ def extract_attachments_to_disk(email: Email, attachment_dir: Path) -> Dict[str,
                 safe_name = f"{base_name}_{counter}.{ext}"
             else:
                 safe_name = f"{base_name}_{counter}"
-            target_path = attachment_dir / safe_name
+            target_path = date_dir / safe_name
             counter += 1
 
         # Write attachment to disk
         target_path.write_bytes(attachment.raw_content)
 
-        # Store relative path (from the PDF location, attachments folder is at same level)
-        attachment_paths[attachment.filename] = f"attachments/{safe_name}"
+        # Store relative path for display in PDF
+        rel_path = f"attachments/{date_str}/{safe_name}"
+        attachment_paths[attachment.filename] = rel_path
 
     return attachment_paths
 
@@ -452,7 +459,7 @@ def _render_email_body(email: Email) -> str:
 def _render_attachments_section(attachments: List[Attachment], attachment_paths: Optional[Dict[str, str]] = None) -> str:
     """Render attachments section listing files in attachments folder.
 
-    Shows filenames with "attachments/" prefix to indicate where to find them.
+    Shows relative paths to attachment files organized by date.
     """
     parts = ['<div class="attachments-section">']
     parts.append('<h3 class="attachments-header">Attachments</h3>')
@@ -460,8 +467,12 @@ def _render_attachments_section(attachments: List[Attachment], attachment_paths:
     for attachment in attachments:
         parts.append('<div class="attachment-item">')
 
-        # Render as plain text with attachments/ prefix
-        display_name = f"attachments/{attachment.filename}"
+        # Use provided path (which includes date), or fall back to simple naming
+        if attachment_paths and attachment.filename in attachment_paths:
+            display_name = attachment_paths[attachment.filename]
+        else:
+            display_name = f"attachments/{attachment.filename}"
+
         parts.append(
             f'<div class="attachment-name">'
             f'{html.escape(display_name)} '
