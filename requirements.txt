@@ -1,6 +1,6 @@
 # Core dependencies
 xhtml2pdf>=0.2.11       # Pure Python HTML→PDF (no native deps, easy distribution)
-pycairo==1.26.0         # Transitive dependency with good wheel support
+pycairo==1.29.0         # Transitive dependency with good wheel support
 
 # Attachment handling
 openpyxl>=3.1.0         # Excel (.xlsx) files
