@@ -348,58 +348,47 @@ def render_email_to_html(email: Email) -> str:
 
 
 def _render_email_header(email: Email) -> str:
-    """Render email header as professional HTML."""
-    parts = ['<div class="email-header">']
+    """Render email header as plain text lines."""
+    lines = []
 
     # Date - formatted for readability
     date_str = email.date.strftime("%A, %B %d, %Y at %I:%M %p")
-    parts.append(_render_header_field("Date", date_str))
+    lines.append(f'<strong>Date:</strong> {date_str}')
 
     # From
-    parts.append(_render_header_field("From", html.escape(email.from_addr)))
+    lines.append(f'<strong>From:</strong> {html.escape(email.from_addr)}')
 
     # To
-    parts.append(_render_header_field("To", html.escape(email.to_addr)))
+    lines.append(f'<strong>To:</strong> {html.escape(email.to_addr)}')
 
     # CC (if present)
     if email.cc_addr:
-        parts.append(_render_header_field("CC", html.escape(email.cc_addr)))
+        lines.append(f'<strong>CC:</strong> {html.escape(email.cc_addr)}')
 
     # BCC (if present)
     if email.bcc_addr:
-        parts.append(_render_header_field("BCC", html.escape(email.bcc_addr)))
+        lines.append(f'<strong>BCC:</strong> {html.escape(email.bcc_addr)}')
 
     # Subject
-    parts.append(_render_header_field("Subject", html.escape(email.subject)))
+    lines.append(f'<strong>Subject:</strong> {html.escape(email.subject)}')
 
     # Message-ID (forensic reference)
-    parts.append(_render_header_field("Message-ID", html.escape(email.message_id)))
+    lines.append(f'<strong>Message-ID:</strong> {html.escape(email.message_id)}')
 
     # In-Reply-To (if present - threading)
     if email.in_reply_to:
-        parts.append(_render_header_field("In-Reply-To", html.escape(email.in_reply_to)))
+        lines.append(f'<strong>In-Reply-To:</strong> {html.escape(email.in_reply_to)}')
 
     # References (if present - threading)
     if email.references:
         refs = " ".join(email.references)
-        parts.append(_render_header_field("References", html.escape(refs)))
+        lines.append(f'<strong>References:</strong> {html.escape(refs)}')
 
     # X-Mailer (if present - authenticity)
     if email.x_mailer:
-        parts.append(_render_header_field("X-Mailer", html.escape(email.x_mailer)))
+        lines.append(f'<strong>X-Mailer:</strong> {html.escape(email.x_mailer)}')
 
-    parts.append("</div>")
-    return "".join(parts)
-
-
-def _render_header_field(label: str, value: str) -> str:
-    """Render a single header field."""
-    return (
-        f'<div class="header-field">'
-        f'<span class="header-label">{label}:</span> '
-        f'<span class="header-value">{value}</span>'
-        f'</div>'
-    )
+    return f'<div class="email-header">{"<br/>".join(lines)}</div>'
 
 
 def _render_email_body(email: Email) -> str:
@@ -471,28 +460,11 @@ body {
     background-color: #f5f5f5;
     border: 1px solid #ddd;
     border-radius: 3px;
-    padding: 12px 15px;
-    margin-bottom: 20px;
+    padding: 8px 10px;
+    margin-bottom: 15px;
     font-family: monospace;
-    font-size: 10pt;
-}
-
-.header-field {
-    margin-bottom: 3px;
-}
-
-.header-label {
-    font-weight: bold;
-    color: #555;
-    display: block;
-    margin-bottom: 2px;
-}
-
-.header-value {
-    color: #222;
-    display: block;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+    font-size: 9pt;
+    line-height: 1.4;
 }
 
 .email-body {

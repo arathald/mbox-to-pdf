@@ -507,7 +507,8 @@ class TestEmailToHtml:
         html = render_email_to_html(emails[0])
 
         assert '<div class="email-header">' in html
-        assert "header-field" in html
+        assert "<strong>Date:</strong>" in html
+        assert "<strong>From:</strong>" in html
 
     def test_render_email_includes_from_field(self, simple_fixture):
         """Header should include From field."""
