@@ -1191,8 +1191,9 @@ def convert_mbox_to_pdfs(
                     # Render email to HTML
                     email_html = render_email_to_html(email)
 
-                    # Collect any attachment errors from this email
+                    # Collect any attachment warnings from this email
                     for attachment in email.attachments:
+                        # Track rendering errors
                         if attachment.error:
                             error_info = AttachmentErrorInfo(
                                 email_subject=email.subject,
@@ -1203,6 +1204,19 @@ def convert_mbox_to_pdfs(
                                 file_size=attachment.format_size_for_display(),
                                 error_type="rendering_failed",
                                 error_message=f"Could not render attachment: {attachment.error}"
+                            )
+                            attachment_errors.append(error_info)
+                        # Track attachments rendered as reference notes (unsupported types)
+                        elif attachment.content_type == "reference":
+                            error_info = AttachmentErrorInfo(
+                                email_subject=email.subject,
+                                email_date=email.date.strftime('%a, %B %d, %Y at %I:%M %p'),
+                                email_from=email.from_addr,
+                                attachment_filename=attachment.filename,
+                                mime_type=attachment.mime_type,
+                                file_size=attachment.format_size_for_display(),
+                                error_type="unsupported_type",
+                                error_message="This file type cannot be rendered in the PDF."
                             )
                             attachment_errors.append(error_info)
 
