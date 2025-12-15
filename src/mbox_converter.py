@@ -1037,13 +1037,11 @@ def add_continuation_headers(
     subject: str,
     from_addr: str,
 ) -> Path:
-    """Add continuation headers to pages 2+ of a multi-page PDF.
+    """Add page headers to all pages of a PDF.
 
-    For multi-page emails, adds a header like:
-    "Subject: [subject] (continued) - From: [from_addr]"
-    to the top of pages 2 and beyond.
-
-    Single-page PDFs are copied through unchanged.
+    Adds a header to every page showing:
+    - First page: "Subject: [subject] - From: [from_addr] (Page 1 of N)"
+    - Other pages: "Subject: [subject] (continued) - From: [from_addr] (Page N of M)"
 
     Args:
         input_pdf: Path to the input PDF
@@ -1068,16 +1066,8 @@ def add_continuation_headers(
 
     total_pages = len(reader.pages)
 
-    # If single page, just copy through
-    if total_pages <= 1:
-        for page in reader.pages:
-            writer.add_page(page)
-        with open(output_pdf, "wb") as f:
-            writer.write(f)
-        return output_pdf
-
-    # Create header overlay for continuation pages
-    def create_header_overlay(page_num: int) -> BytesIO:
+    # Create header overlay for all pages
+    def create_header_overlay(page_num: int, is_first: bool) -> BytesIO:
         """Create a PDF page with just the header text."""
         packet = BytesIO()
         c = canvas.Canvas(packet, pagesize=letter)
@@ -1087,8 +1077,11 @@ def add_continuation_headers(
         max_subject_len = 60
         display_subject = subject[:max_subject_len] + "..." if len(subject) > max_subject_len else subject
 
-        # Header text
-        header_text = f"Subject: {display_subject} (continued - page {page_num} of {total_pages})"
+        # Header text - different for first page vs continuation
+        if is_first:
+            header_text = f"Subject: {display_subject} - From: {from_addr[:40]} (Page {page_num} of {total_pages})"
+        else:
+            header_text = f"Subject: {display_subject} (continued) - From: {from_addr[:40]} (Page {page_num} of {total_pages})"
 
         # Draw header at top of page
         c.setFont("Helvetica", 8)
@@ -1101,17 +1094,14 @@ def add_continuation_headers(
 
     # Process each page
     for i, page in enumerate(reader.pages):
-        if i == 0:
-            # First page - no header needed
-            writer.add_page(page)
-        else:
-            # Create header overlay for this page
-            header_pdf = PdfReader(create_header_overlay(i + 1))
-            header_page = header_pdf.pages[0]
+        # Create header overlay for this page
+        is_first_page = (i == 0)
+        header_pdf = PdfReader(create_header_overlay(i + 1, is_first_page))
+        header_page = header_pdf.pages[0]
 
-            # Merge header onto the original page
-            page.merge_page(header_page)
-            writer.add_page(page)
+        # Merge header onto the original page
+        page.merge_page(header_page)
+        writer.add_page(page)
 
     with open(output_pdf, "wb") as f:
         writer.write(f)
@@ -1239,21 +1229,8 @@ def convert_mbox_to_pdfs(
                     # Render email to HTML with attachment paths
                     email_html = render_email_to_html(email, attachment_paths)
 
-                    # Collect any attachment warnings from this email
-                    for attachment in email.attachments:
-                        # Track attachments that were saved to disk
-                        if attachment.filename in attachment_paths:
-                            error_info = AttachmentErrorInfo(
-                                email_subject=email.subject,
-                                email_date=email.date.strftime('%a, %B %d, %Y at %I:%M %p'),
-                                email_from=email.from_addr,
-                                attachment_filename=attachment.filename,
-                                mime_type=attachment.mime_type,
-                                file_size=attachment.format_size_for_display(),
-                                error_type="saved_to_disk",
-                                error_message="Attachment saved to attachments folder."
-                            )
-                            attachment_errors.append(error_info)
+                    # Note: All attachments are now extracted to disk, so no attachment errors to report
+                    # (previously we tracked unsupported types as errors)
 
                     # Generate initial PDF
                     raw_pdf = temp_path / f"email_{j:04d}_raw.pdf"
