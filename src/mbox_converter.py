@@ -173,53 +173,45 @@ def render_attachment(attachment: Attachment) -> str:
 
 def _render_docx(attachment: Attachment) -> str:
     """Extract text content from Word document."""
-    try:
-        from docx import Document
-        from io import BytesIO
-        doc = Document(BytesIO(attachment.raw_content))
-        text = '\n\n'.join(paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip())
+    from docx import Document
+    from io import BytesIO
+    doc = Document(BytesIO(attachment.raw_content))
+    text = '\n\n'.join(paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip())
 
-        if not text:
-            return _render_reference(attachment)
-
-        # Render as formatted text with paragraph breaks preserved
-        paragraphs = text.split('\n\n')
-        formatted = ''.join(f'<p>{html.escape(para).replace(chr(10), "<br/>")}</p>' for para in paragraphs if para.strip())
-        return f'<div class="attachment-docx">{formatted}</div>'
-    except Exception:
-        # If extraction fails, show reference
+    if not text:
         return _render_reference(attachment)
+
+    # Render as formatted text with paragraph breaks preserved
+    paragraphs = text.split('\n\n')
+    formatted = ''.join(f'<p>{html.escape(para).replace(chr(10), "<br/>")}</p>' for para in paragraphs if para.strip())
+    return f'<div class="attachment-docx">{formatted}</div>'
 
 
 def _render_xlsx(attachment: Attachment) -> str:
     """Extract and render Excel spreadsheet as HTML tables."""
-    try:
-        from openpyxl import load_workbook
-        from io import BytesIO
-        wb = load_workbook(BytesIO(attachment.raw_content))
+    from openpyxl import load_workbook
+    from io import BytesIO
+    wb = load_workbook(BytesIO(attachment.raw_content))
 
-        html_parts = []
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            html_parts.append(f'<h4 style="margin-top: 1em; margin-bottom: 0.5em;">{html.escape(sheet_name)}</h4>')
-            html_parts.append('<table class="attachment-xlsx">')
+    html_parts = []
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        html_parts.append(f'<h4 style="margin-top: 1em; margin-bottom: 0.5em;">{html.escape(sheet_name)}</h4>')
+        html_parts.append('<table class="attachment-xlsx">')
 
-            for row in ws.iter_rows():
-                html_parts.append('<tr>')
-                for cell in row:
-                    value = cell.value if cell.value is not None else ''
-                    html_parts.append(f'<td>{html.escape(str(value))}</td>')
-                html_parts.append('</tr>')
+        for row in ws.iter_rows():
+            html_parts.append('<tr>')
+            for cell in row:
+                value = cell.value if cell.value is not None else ''
+                html_parts.append(f'<td>{html.escape(str(value))}</td>')
+            html_parts.append('</tr>')
 
-            html_parts.append('</table>')
+        html_parts.append('</table>')
 
-        if not html_parts:
-            return _render_reference(attachment)
-
-        return f'<div class="attachment-xlsx">{" ".join(html_parts)}</div>'
-    except Exception:
-        # If extraction fails, show reference
+    if not html_parts:
         return _render_reference(attachment)
+
+    return f'<div class="attachment-xlsx">{"".join(html_parts)}</div>'
 
 
 def _render_html(attachment: Attachment) -> str:
@@ -404,7 +396,7 @@ def _render_header_field(label: str, value: str) -> str:
     """Render a single header field."""
     return (
         f'<div class="header-field">'
-        f'<span class="header-label">{label}:</span>'
+        f'<span class="header-label">{label}:</span> '
         f'<span class="header-value">{value}</span>'
         f'</div>'
     )
@@ -486,7 +478,7 @@ body {
 }
 
 .header-field {
-    margin-bottom: 10px;
+    margin-bottom: 3px;
 }
 
 .header-label {
@@ -630,7 +622,7 @@ body {
 """
 
 
-def generate_pdf(html_content: str, output_path: Path) -> Path:
+def generate_pdf(html_content: str, output_path: Path, image_temp_dir: Optional[Path] = None) -> Path:
     """Generate a PDF from HTML content using xhtml2pdf.
 
     All processing is local—no network calls, no native dependencies.
@@ -638,6 +630,7 @@ def generate_pdf(html_content: str, output_path: Path) -> Path:
     Args:
         html_content: HTML string to render
         output_path: Path for the output PDF file
+        image_temp_dir: Optional temp directory for image files
 
     Returns:
         The output path (for chaining)
@@ -646,6 +639,46 @@ def generate_pdf(html_content: str, output_path: Path) -> Path:
         RuntimeError: If PDF generation fails
     """
     from xhtml2pdf import pisa
+    import base64
+    import re
+
+    # If we have a temp dir, convert data: URIs to file: URIs
+    if image_temp_dir:
+        image_temp_dir = Path(image_temp_dir)
+        image_temp_dir.mkdir(parents=True, exist_ok=True)
+
+        # Find all data: URIs and write them to temp files
+        counter = [0]  # Use list to allow modification in nested function
+        def replace_data_uri(match):
+            uri = match.group(0)
+            counter[0] += 1
+            try:
+                header, data = uri.split(',', 1)
+                if 'base64' in header:
+                    image_data = base64.b64decode(data)
+                else:
+                    image_data = data.encode('utf-8')
+
+                # Determine file extension from MIME type
+                ext = '.png'
+                if 'jpeg' in header or 'jpg' in header:
+                    ext = '.jpg'
+                elif 'gif' in header:
+                    ext = '.gif'
+                elif 'webp' in header:
+                    ext = '.webp'
+
+                # Write to temp file
+                temp_file = image_temp_dir / f"image_{counter[0]}{ext}"
+                temp_file.write_bytes(image_data)
+
+                # Return file: URI
+                return f'file://{temp_file.absolute()}'
+            except Exception:
+                return uri  # Return original if conversion fails
+
+        # Replace all data: URIs
+        html_content = re.sub(r'data:[^"\';\s]+;[^"\';\s]*;[^"\']*,[^"\']*', replace_data_uri, html_content)
 
     # Wrap content in full HTML document with styles
     full_html = f"""<!DOCTYPE html>
@@ -1175,7 +1208,8 @@ def convert_mbox_to_pdfs(
 
                     # Generate initial PDF
                     raw_pdf = temp_path / f"email_{j:04d}_raw.pdf"
-                    generate_pdf(email_html, raw_pdf)
+                    images_dir = temp_path / f"email_{j:04d}_images"
+                    generate_pdf(email_html, raw_pdf, image_temp_dir=images_dir)
 
                     # Add continuation headers for multi-page emails
                     final_pdf = temp_path / f"email_{j:04d}.pdf"
