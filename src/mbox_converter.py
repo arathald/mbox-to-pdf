@@ -450,10 +450,9 @@ def _render_email_body(email: Email) -> str:
 
 
 def _render_attachments_section(attachments: List[Attachment], attachment_paths: Optional[Dict[str, str]] = None) -> str:
-    """Render attachments section - either as links or embedded content.
+    """Render attachments section listing files in attachments folder.
 
-    If attachment_paths is provided, renders as hyperlinks to external files.
-    Otherwise, embeds content inline (for backward compatibility).
+    Shows filenames with "attachments/" prefix to indicate where to find them.
     """
     parts = ['<div class="attachments-section">']
     parts.append('<h3 class="attachments-header">Attachments</h3>')
@@ -461,27 +460,14 @@ def _render_attachments_section(attachments: List[Attachment], attachment_paths:
     for attachment in attachments:
         parts.append('<div class="attachment-item">')
 
-        if attachment_paths and attachment.filename in attachment_paths:
-            # Render as hyperlink
-            rel_path = attachment_paths[attachment.filename]
-            parts.append(
-                f'<a href="{html.escape(rel_path)}" class="attachment-link">'
-                f'{html.escape(attachment.filename)}'
-                f'</a>'
-            )
-            parts.append(
-                f'<small class="attachment-size"> ({attachment.format_size_for_display()})</small>'
-            )
-        else:
-            # Render content inline (backward compatibility)
-            parts.append(
-                f'<div class="attachment-name">'
-                f'{html.escape(attachment.filename)} '
-                f'<small>({attachment.format_size_for_display()})</small>'
-                f'</div>'
-            )
-            rendered = render_attachment(attachment)
-            parts.append(f'<div class="attachment-content">{rendered}</div>')
+        # Render as plain text with attachments/ prefix
+        display_name = f"attachments/{attachment.filename}"
+        parts.append(
+            f'<div class="attachment-name">'
+            f'{html.escape(display_name)} '
+            f'<small>({attachment.format_size_for_display()})</small>'
+            f'</div>'
+        )
 
         parts.append("</div>")
 
@@ -1036,18 +1022,20 @@ def add_continuation_headers(
     output_pdf: Path,
     subject: str,
     from_addr: str,
+    email_date: Optional[datetime] = None,
 ) -> Path:
     """Add page headers to all pages of a PDF.
 
     Adds a header to every page showing:
-    - First page: "Subject: [subject] - From: [from_addr] (Page 1 of N)"
-    - Other pages: "Subject: [subject] (continued) - From: [from_addr] (Page N of M)"
+    - First page: "Subject: [subject] - From: [from_addr] - [YYYY-MM-DD] (Page 1 of N)"
+    - Other pages: "Subject: [subject] (continued) - From: [from_addr] - [YYYY-MM-DD] (Page N of M)"
 
     Args:
         input_pdf: Path to the input PDF
         output_pdf: Path for the output PDF
         subject: Email subject for the header
         from_addr: Email sender for the header
+        email_date: Optional email date for the header (formatted as YYYY-MM-DD)
 
     Returns:
         The output path
@@ -1066,6 +1054,11 @@ def add_continuation_headers(
 
     total_pages = len(reader.pages)
 
+    # Format date if provided
+    date_str = ""
+    if email_date:
+        date_str = email_date.strftime("%Y-%m-%d")
+
     # Create header overlay for all pages
     def create_header_overlay(page_num: int, is_first: bool) -> BytesIO:
         """Create a PDF page with just the header text."""
@@ -1074,17 +1067,17 @@ def add_continuation_headers(
         page_width, page_height = letter
 
         # Truncate subject if too long
-        max_subject_len = 60
+        max_subject_len = 50
         display_subject = subject[:max_subject_len] + "..." if len(subject) > max_subject_len else subject
 
         # Header text - different for first page vs continuation
         if is_first:
-            header_text = f"Subject: {display_subject} - From: {from_addr[:40]} (Page {page_num} of {total_pages})"
+            header_text = f"Subject: {display_subject} - From: {from_addr[:35]} - {date_str} (Page {page_num} of {total_pages})"
         else:
-            header_text = f"Subject: {display_subject} (continued) - From: {from_addr[:40]} (Page {page_num} of {total_pages})"
+            header_text = f"Subject: {display_subject} (continued) - From: {from_addr[:35]} - {date_str} (Page {page_num} of {total_pages})"
 
         # Draw header at top of page
-        c.setFont("Helvetica", 8)
+        c.setFont("Helvetica", 7)
         c.setFillColorRGB(0.4, 0.4, 0.4)  # Gray color
         c.drawString(54, page_height - 36, header_text)  # 0.75" from top, 0.75" from left
 
@@ -1244,6 +1237,7 @@ def convert_mbox_to_pdfs(
                         final_pdf,
                         subject=email.subject,
                         from_addr=email.from_addr,
+                        email_date=email.date,
                     )
 
                     email_pdfs.append(final_pdf)
